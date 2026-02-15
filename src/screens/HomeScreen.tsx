@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Text, List, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -13,9 +13,10 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
+import { groupArtistsByNormalizedName } from '../utils/artistMerge';
 
 type RootStackParamList = {
-  ArtistDetail: { artistId: number; artistName: string };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
   TrackDetail: { trackId: number };
   AlbumDetail: { albumId: number; highlightTrackId?: number };
 };
@@ -76,10 +77,14 @@ export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
   const playTrack = usePlayerStore((s) => s.playTrack);
 
-  const { data: artists, isLoading: artistsLoading } = useQuery({
-    queryKey: ['artists'],
-    queryFn: () => api.getArtists({ limit: 20 }),
+  const { data: artistsRaw, isLoading: artistsLoading } = useQuery({
+    queryKey: ['artists', 'home'],
+    queryFn: () => api.getArtists({ limit: 100, home: true }),
   });
+  const groupedArtists = useMemo(
+    () => groupArtistsByNormalizedName(artistsRaw || []),
+    [artistsRaw]
+  );
   const { data: recentlyAdded, isLoading: recentLoading } = useQuery({
     queryKey: ['recently-added'],
     queryFn: () => api.getRecentlyAdded(10),
@@ -140,16 +145,21 @@ export default function HomeScreen() {
       {artistsLoading ? (
         <Text style={styles.muted}>Loading artists...</Text>
       ) : (
-        (artists || []).map((a: { id: number; name: string }) => (
+        groupedArtists.map((g) => (
           <List.Item
-            key={a.id}
-            title={a.name}
-            left={() => <ArtworkImage type="artist" id={a.id} size={48} style={styles.artistArtwork} />}
-            onPress={() => navigation.navigate('ArtistDetail', { artistId: a.id, artistName: a.name })}
+            key={g.primaryId}
+            title={g.displayName}
+            left={() => <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artistArtwork} />}
+            onPress={() =>
+              navigation.navigate('ArtistDetail', {
+                artistIds: g.artistIds,
+                artistName: g.displayName,
+              })
+            }
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
             style={styles.item}
             accessibilityRole="button"
-            accessibilityLabel={`View ${a.name}`}
+            accessibilityLabel={`View ${g.displayName}`}
           />
         ))
       )}

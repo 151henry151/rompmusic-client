@@ -18,7 +18,7 @@ type AlbumDetailParams = { albumId: number; highlightTrackId?: number };
 type RootStackParamList = {
   AlbumDetail: AlbumDetailParams;
   TrackDetail: { trackId: number };
-  ArtistDetail: { artistId: number; artistName: string };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
 };
 
 function formatDuration(seconds: number): string {

@@ -3,17 +3,19 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { Text, List } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 
-type ArtistDetailParams = { artistId: number; artistName: string };
+type ArtistDetailParams =
+  | { artistId: number; artistName: string }
+  | { artistIds: number[]; artistName: string };
 type RootStackParamList = {
   ArtistDetail: ArtistDetailParams;
   AlbumDetail: { albumId: number; highlightTrackId?: number };
@@ -22,16 +24,31 @@ type RootStackParamList = {
 export default function ArtistDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ArtistDetail'>>();
-  const { artistId, artistName } = route.params;
+  const params = route.params;
+  const artistIds = 'artistIds' in params ? params.artistIds : [params.artistId];
+  const artistName = params.artistName;
+  const primaryId = artistIds[0];
 
-  const { data: artist } = useQuery({
-    queryKey: ['artist', artistId],
-    queryFn: () => api.getArtist(artistId),
+  const albumQueries = useQueries({
+    queries: artistIds.map((id) => ({
+      queryKey: ['albums', id],
+      queryFn: () => api.getAlbums({ artist_id: id }),
+    })),
   });
-  const { data: albums } = useQuery({
-    queryKey: ['albums', artistId],
-    queryFn: () => api.getAlbums({ artist_id: artistId }),
-  });
+  const albums = useMemo(() => {
+    const seen = new Set<number>();
+    const out: { id: number; title: string; year?: number }[] = [];
+    for (const q of albumQueries) {
+      if (!q.data) continue;
+      for (const a of q.data) {
+        if (!seen.has(a.id)) {
+          seen.add(a.id);
+          out.push(a);
+        }
+      }
+    }
+    return out;
+  }, [albumQueries]);
   const playTrack = usePlayerStore((s) => s.playTrack);
 
   const handleAlbumPress = (albumId: number) => {
@@ -47,9 +64,9 @@ export default function ArtistDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <ArtworkImage type="artist" id={artistId} size={160} style={styles.artistArtwork} />
+      <ArtworkImage type="artist" id={primaryId} size={160} style={styles.artistArtwork} />
       <Text variant="headlineSmall" style={styles.header}>
-        {artist?.name ?? artistName}
+        {artistName}
       </Text>
       <Text variant="titleSmall" style={styles.section}>
         Albums

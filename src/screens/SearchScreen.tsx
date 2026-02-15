@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { TextInput, List, Text, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -12,9 +12,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
+import { groupArtistsByNormalizedName } from '../utils/artistMerge';
 
 type RootStackParamList = {
-  ArtistDetail: { artistId: number; artistName: string };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
   AlbumDetail: { albumId: number; highlightTrackId?: number };
   TrackDetail: { trackId: number };
 };
@@ -29,6 +30,10 @@ export default function SearchScreen() {
     queryFn: () => api.search(q),
     enabled: q.length >= 2,
   });
+  const groupedSearchArtists = useMemo(
+    () => groupArtistsByNormalizedName(data?.artists || []),
+    [data?.artists]
+  );
 
   const handlePlayTrack = async (trackId: number) => {
     const track = (data?.tracks || []).find((t: { id: number }) => t.id === trackId);
@@ -59,21 +64,23 @@ export default function SearchScreen() {
       {isLoading && <Text style={styles.muted}>Searching...</Text>}
 
       {/* Artists */}
-      {data?.artists?.length > 0 && (
+      {groupedSearchArtists.length > 0 && (
         <>
           <Text variant="titleSmall" style={styles.section}>
             Artists
           </Text>
-          {(data.artists || []).map((a: { id: number; name: string }) => (
+          {groupedSearchArtists.map((g) => (
             <List.Item
-              key={`artist-${a.id}`}
-              title={a.name}
-              left={() => <ArtworkImage type="artist" id={a.id} size={48} style={styles.artwork} />}
-              onPress={() => navigation.navigate('ArtistDetail', { artistId: a.id, artistName: a.name })}
+              key={`artist-${g.primaryId}`}
+              title={g.displayName}
+              left={() => <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artwork} />}
+              onPress={() =>
+                navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName })
+              }
               right={(props) => <List.Icon {...props} icon="chevron-right" />}
               style={styles.item}
               accessibilityRole="button"
-              accessibilityLabel={`View artist ${a.name}`}
+              accessibilityLabel={`View artist ${g.displayName}`}
             />
           ))}
         </>

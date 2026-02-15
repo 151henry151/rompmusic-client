@@ -84,7 +84,7 @@ export const api = {
     return `${API_BASE.replace('/api/v1', '')}/api/v1/artwork/${type}/${id}`;
   },
 
-  async getArtists(params?: { skip?: number; limit?: number; search?: string }) {
+  async getArtists(params?: { skip?: number; limit?: number; search?: string; home?: boolean; sort_by?: string; order?: string }) {
     const q = new URLSearchParams(params as Record<string, string>).toString();
     return fetchApi(`/library/artists${q ? '?' + q : ''}`);
   },
@@ -93,7 +93,7 @@ export const api = {
     return fetchApi(`/library/artists/${id}`);
   },
 
-  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string }) {
+  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string; sort_by?: string; order?: string }) {
     const q = new URLSearchParams(params as Record<string, string>).toString();
     return fetchApi(`/library/albums${q ? '?' + q : ''}`);
   },
@@ -102,7 +102,7 @@ export const api = {
     return fetchApi(`/library/albums/${id}`);
   },
 
-  async getTracks(params?: { skip?: number; limit?: number; album_id?: number; artist_id?: number; search?: string }) {
+  async getTracks(params?: { skip?: number; limit?: number; album_id?: number; artist_id?: number; search?: string; sort_by?: string; order?: string }) {
     const q = new URLSearchParams(params as Record<string, string>).toString();
     return fetchApi(`/library/tracks${q ? '?' + q : ''}`);
   },
