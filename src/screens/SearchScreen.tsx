@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
-import { Searchbar, List, Text } from 'react-native-paper';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { TextInput, List, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
@@ -27,12 +27,18 @@ export default function SearchScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Searchbar
-        placeholder="Search artists, albums, tracks"
-        value={q}
-        onChangeText={setQ}
-        style={styles.search}
-      />
+      <View style={styles.searchRow}>
+        <TextInput
+          mode="outlined"
+          placeholder="Search artists, albums, tracks"
+          value={q}
+          onChangeText={setQ}
+          style={styles.search}
+          left={<TextInput.Icon icon="magnify" />}
+          right={q ? <TextInput.Icon icon="close" onPress={() => setQ('')} /> : undefined}
+          accessibilityLabel="Search artists, albums, tracks"
+        />
+      </View>
       {q.length < 2 && (
         <Text style={styles.hint}>Type at least 2 characters to search</Text>
       )}
@@ -49,6 +55,9 @@ export default function SearchScreen() {
               description={t.artist_name}
               onPress={() => handlePlay(t.id)}
               style={styles.item}
+              right={(props) => <List.Icon {...props} icon="play" />}
+              accessibilityRole="button"
+              accessibilityLabel={`Play ${t.title} by ${t.artist_name || 'Unknown'}`}
             />
           ))}
         </>
@@ -59,7 +68,8 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  search: { margin: 16, backgroundColor: '#1a1a1a' },
+  searchRow: { padding: 16 },
+  search: { backgroundColor: '#1a1a1a' },
   hint: { padding: 16, color: '#666' },
   muted: { padding: 16, color: '#888' },
   section: { padding: 16, color: '#fff' },

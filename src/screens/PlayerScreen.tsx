@@ -12,8 +12,14 @@ interface Props {
   onClose: () => void;
 }
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export default function PlayerScreen({ onClose }: Props) {
-  const { currentTrack, isPlaying, position, duration, play, pause, seekTo, skipToNext, skipToPrevious } =
+  const { currentTrack, isPlaying, position, duration, isLoading, error, play, pause, seekTo, skipToNext, skipToPrevious } =
     usePlayerStore();
 
   if (!currentTrack) {
@@ -25,7 +31,7 @@ export default function PlayerScreen({ onClose }: Props) {
 
   return (
     <View style={styles.container}>
-      <IconButton icon="close" onPress={onClose} style={styles.close} />
+      <IconButton icon="close" onPress={onClose} style={styles.close} accessibilityLabel="Close player" />
       <View style={styles.artwork} />
       <Text variant="headlineSmall" style={styles.title}>
         {currentTrack.title}
@@ -33,20 +39,31 @@ export default function PlayerScreen({ onClose }: Props) {
       <Text variant="bodyLarge" style={styles.artist}>
         {currentTrack.artist_name || 'Unknown'}
       </Text>
+      {error && (
+        <Text variant="bodySmall" style={styles.error}>
+          {error}
+        </Text>
+      )}
       <Slider
         value={progress}
         onSlidingComplete={(v) => seekTo(v * duration)}
         style={styles.slider}
         color="#4a9eff"
       />
+      <View style={styles.timeRow}>
+        <Text variant="bodySmall" style={styles.time}>{formatTime(position)}</Text>
+        <Text variant="bodySmall" style={styles.time}>{formatTime(duration)}</Text>
+      </View>
       <View style={styles.controls}>
-        <IconButton icon="skip-previous" size={48} onPress={skipToPrevious} />
+        <IconButton icon="skip-previous" size={48} onPress={skipToPrevious} disabled={isLoading} accessibilityLabel="Previous track" />
         <IconButton
           icon={isPlaying ? 'pause' : 'play'}
           size={64}
           onPress={() => (isPlaying ? pause() : play())}
+          disabled={isLoading}
+          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
         />
-        <IconButton icon="skip-next" size={48} onPress={skipToNext} />
+        <IconButton icon="skip-next" size={48} onPress={skipToNext} disabled={isLoading} accessibilityLabel="Next track" />
       </View>
     </View>
   );
@@ -83,7 +100,21 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   slider: {
-    marginVertical: 16,
+    marginVertical: 8,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  time: {
+    color: '#888',
+  },
+  error: {
+    color: '#f44',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   controls: {
     flexDirection: 'row',

@@ -4,18 +4,21 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, List, Button } from 'react-native-paper';
+import { ScrollView, StyleSheet } from 'react-native';
+import { Text, List } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
-import { usePlayerStore } from '../store/playerStore';
+
+type RootStackParamList = { ArtistDetail: { artistId: number; artistName: string } };
 
 export default function HomeScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
   const { data: artists, isLoading } = useQuery({
     queryKey: ['artists'],
     queryFn: () => api.getArtists({ limit: 20 }),
   });
-  const playTrack = usePlayerStore((s) => s.playTrack);
 
   return (
     <ScrollView style={styles.container}>
@@ -29,8 +32,11 @@ export default function HomeScreen() {
           <List.Item
             key={a.id}
             title={a.name}
-            onPress={() => {}}
+            onPress={() => navigation.navigate('ArtistDetail', { artistId: a.id, artistName: a.name })}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
             style={styles.item}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${a.name}`}
           />
         ))
       )}

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,16 +12,25 @@ import { View, StyleSheet } from 'react-native';
 import { Icon } from 'react-native-paper';
 
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SearchScreen from '../screens/SearchScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
+import ArtistDetailScreen from '../screens/ArtistDetailScreen';
 import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+});
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
@@ -77,7 +86,7 @@ export default function AppNavigator() {
   return (
     <NavigationContainer
       theme={{
-        dark: true,
+        ...DarkTheme,
         colors: {
           primary: '#4a9eff',
           background: '#0a0a0a',
@@ -90,9 +99,19 @@ export default function AppNavigator() {
     >
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
         ) : (
-          <Stack.Screen name="Main" component={MainTabs} />
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen
+              name="ArtistDetail"
+              component={ArtistDetailScreen}
+              options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

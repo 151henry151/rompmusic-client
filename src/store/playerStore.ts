@@ -49,6 +49,7 @@ let nextSound: Audio.Sound | null = null;
 async function loadAndPlay(
   track: Track,
   onFinish: () => void,
+  onPositionUpdate: (pos: number) => void,
   position = 0
 ): Promise<Audio.Sound> {
   let url = api.getStreamUrl(track.id);
@@ -58,11 +59,17 @@ async function loadAndPlay(
     { uri: url },
     { shouldPlay: true, positionMillis: position * 1000 },
     (status) => {
-      if (status.isLoaded && status.didJustFinishAndNotLoop) {
-        onFinish();
+      if (status.isLoaded) {
+        if (status.didJustFinishAndNotLoop) onFinish();
+        else if ('positionMillis' in status) onPositionUpdate(status.positionMillis / 1000);
       }
     }
   );
+  try {
+    await s.setProgressUpdateIntervalAsync(500);
+  } catch {
+    // Web may not support; position updates are best-effort
+  }
   return s;
 }
 
@@ -96,13 +103,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { currentTrack, queue, currentIndex } = get();
     if (!currentTrack) return;
     set({ isPlaying: true, isLoading: true, error: null });
+    const onPosition = (pos: number) => set({ position: pos });
     try {
       if (sound) {
         await sound.playAsync();
       } else {
         const nextIndex = currentIndex + 1;
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
-        sound = await loadAndPlay(currentTrack, () => get().skipToNext(), get().position);
+        sound = await loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position);
         if (nextTrack) nextSound = await preloadNext(nextTrack);
       }
       set({ isPlaying: true, isLoading: false });
@@ -136,7 +144,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue, currentIndex } = get();
     if (currentIndex + 1 >= queue.length) {
       await sound?.unloadAsync();
+      await nextSound?.unloadAsync();
       sound = null;
+      nextSound = null;
       set({ isPlaying: false, currentTrack: null });
       return;
     }
@@ -146,12 +156,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await sound?.unloadAsync();
       sound = nextSound;
       nextSound = null;
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && 'positionMillis' in status) set({ position: status.positionMillis / 1000 });
+      });
+      try {
+        await sound.setProgressUpdateIntervalAsync(500);
+      } catch {
+        /* best-effort on web */
+      }
       await sound.playAsync();
       const nextNext = nextIndex + 1 < queue.length ? queue[nextIndex + 1] : null;
       if (nextNext) nextSound = await preloadNext(nextNext);
     } else {
       await sound?.unloadAsync();
-      sound = await loadAndPlay(nextTrack, () => get().skipToNext());
+      sound = await loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
     }
     set({ currentTrack: nextTrack, currentIndex: nextIndex, position: 0, duration: nextTrack.duration });
   },
@@ -166,7 +184,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (currentIndex <= 0) return;
     const prevTrack = queue[currentIndex - 1];
     await sound?.unloadAsync();
-    sound = await loadAndPlay(prevTrack, () => get().skipToNext());
+    await nextSound?.unloadAsync();
+    nextSound = null;
+    sound = await loadAndPlay(prevTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
     set({ currentTrack: prevTrack, currentIndex: currentIndex - 1, position: 0, duration: prevTrack.duration });
   },
 

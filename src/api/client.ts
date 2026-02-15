@@ -59,6 +59,10 @@ export const api = {
     return `${API_BASE.replace('/api/v1', '')}/api/v1/stream/${trackId}`;
   },
 
+  getArtworkUrl(type: 'album' | 'artist', id: number) {
+    return `${API_BASE.replace('/api/v1', '')}/api/v1/artwork/${type}/${id}`;
+  },
+
   async getArtists(params?: { skip?: number; limit?: number; search?: string }) {
     const q = new URLSearchParams(params as Record<string, string>).toString();
     return fetchApi(`/library/artists${q ? '?' + q : ''}`);

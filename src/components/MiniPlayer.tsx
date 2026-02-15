@@ -18,7 +18,13 @@ export default function MiniPlayer({ onExpand }: Props) {
   if (!currentTrack) return null;
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onExpand} activeOpacity={1}>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={onExpand}
+      activeOpacity={1}
+      accessibilityRole="button"
+      accessibilityLabel={`Now playing: ${currentTrack.title}. Tap to open player`}
+    >
       <View style={styles.info}>
         <Text variant="bodyMedium" numberOfLines={1} style={styles.title}>
           {currentTrack.title}

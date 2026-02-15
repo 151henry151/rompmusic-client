@@ -9,21 +9,30 @@ import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading } = useAuthStore();
+  const { register, isLoading } = useAuthStore();
   const navigation = useNavigation();
 
-  const handleLogin = async () => {
-    if (!username.trim() || !password) {
-      Alert.alert('Error', 'Please enter username and password');
+  const handleRegister = async () => {
+    if (!username.trim()) {
+      Alert.alert('Error', 'Please enter a username');
+      return;
+    }
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter an email');
+      return;
+    }
+    if (!password) {
+      Alert.alert('Error', 'Please enter a password');
       return;
     }
     try {
-      await login(username.trim(), password);
+      await register(username.trim(), email.trim(), password);
     } catch (e) {
-      Alert.alert('Login failed', e instanceof Error ? e.message : 'Invalid credentials');
+      Alert.alert('Registration failed', e instanceof Error ? e.message : 'Could not create account');
     }
   };
 
@@ -34,15 +43,25 @@ export default function LoginScreen() {
     >
       <View style={styles.box}>
         <Text variant="headlineMedium" style={styles.title}>
-          RompMusic
+          Create account
         </Text>
         <Text variant="bodyMedium" style={styles.subtitle}>
-          Libre music streaming
+          Sign up for RompMusic
         </Text>
         <TextInput
           label="Username"
           value={username}
           onChangeText={setUsername}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+          disabled={isLoading}
+        />
+        <TextInput
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
           style={styles.input}
@@ -58,20 +77,20 @@ export default function LoginScreen() {
         />
         <Button
           mode="contained"
-          onPress={handleLogin}
+          onPress={handleRegister}
           loading={isLoading}
           disabled={isLoading}
           style={styles.button}
         >
-          Sign in
+          Create account
         </Button>
         <Button
           mode="text"
-          onPress={() => navigation.navigate('Register')}
+          onPress={() => navigation.goBack()}
           disabled={isLoading}
-          style={styles.registerButton}
+          style={styles.backButton}
         >
-          Create account
+          Already have an account? Sign in
         </Button>
       </View>
     </KeyboardAvoidingView>
@@ -107,7 +126,7 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 8,
   },
-  registerButton: {
+  backButton: {
     marginTop: 16,
   },
 });
