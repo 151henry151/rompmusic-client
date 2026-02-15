@@ -82,10 +82,12 @@ function AuthenticatedLayout() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const prevTrackRef = React.useRef<Track | null>(null);
   const restoreSettings = useSettingsStore((s) => s.restoreSettings);
+  const fetchClientConfig = useSettingsStore((s) => s.fetchClientConfig);
 
   React.useEffect(() => {
     restoreSettings();
-  }, [restoreSettings]);
+    fetchClientConfig();
+  }, [restoreSettings, fetchClientConfig]);
 
   React.useEffect(() => {
     if (currentTrack && !prevTrackRef.current) {

@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { Audio } from 'expo-av';
 import { api } from '../api/client';
 import { getToken } from '../api/client';
+import { useSettingsStore } from './settingsStore';
 
 export interface Track {
   id: number;
@@ -57,7 +58,8 @@ async function loadAndPlay(
   onPositionUpdate: (pos: number) => void,
   position = 0
 ): Promise<Audio.Sound> {
-  let url = api.getStreamUrl(track.id);
+  const format = useSettingsStore.getState().getEffectiveStreamFormat();
+  let url = api.getStreamUrl(track.id, format);
   const t = getToken();
   if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
   const { sound: s } = await Audio.Sound.createAsync(
@@ -80,7 +82,8 @@ async function loadAndPlay(
 
 async function preloadNext(track: Track): Promise<Audio.Sound | null> {
   try {
-    let url = api.getStreamUrl(track.id);
+    const format = useSettingsStore.getState().getEffectiveStreamFormat();
+    let url = api.getStreamUrl(track.id, format);
     const t = getToken();
     if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
     const { sound: s } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: false });

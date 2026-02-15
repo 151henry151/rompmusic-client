@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Text, List, Button, Switch } from 'react-native-paper';
+import { Text, List, Button, Switch, Menu } from 'react-native-paper';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 
@@ -21,7 +21,10 @@ export default function SettingsScreen() {
   const setDisplayArtistsWithoutArtwork = useSettingsStore((s) => s.setDisplayArtistsWithoutArtwork);
   const groupCollaborationsByPrimary = useSettingsStore((s) => s.groupCollaborationsByPrimary);
   const setGroupCollaborationsByPrimary = useSettingsStore((s) => s.setGroupCollaborationsByPrimary);
+  const streamFormat = useSettingsStore((s) => s.getEffectiveStreamFormat());
+  const setStreamFormat = useSettingsStore((s) => s.setStreamFormat);
   const isSettingVisible = useSettingsStore((s) => s.isSettingVisible);
+  const [audioMenuVisible, setAudioMenuVisible] = useState(false);
 
   useEffect(() => {
     restoreSettings();
@@ -122,12 +125,25 @@ export default function SettingsScreen() {
         left={() => <List.Icon icon="music" />}
         style={styles.item}
       />
-      <List.Item
-        title="Audio quality"
-        description="Stream at original quality"
-        left={() => <List.Icon icon="quality-high" />}
-        style={styles.item}
-      />
+      {isSettingVisible('audio_format') && (
+        <Menu
+          visible={audioMenuVisible}
+          onDismiss={() => setAudioMenuVisible(false)}
+          anchor={
+            <List.Item
+              title="Audio quality"
+              description={streamFormat === 'ogg' ? 'Stream as OGG (transcoded)' : 'Stream at original quality'}
+              left={() => <List.Icon icon="quality-high" />}
+              onPress={() => setAudioMenuVisible(true)}
+              right={(props) => <List.Icon {...props} icon="chevron-down" />}
+              style={styles.item}
+            />
+          }
+        >
+          <Menu.Item onPress={() => { setStreamFormat('original'); setAudioMenuVisible(false); }} title="Original format" />
+          <Menu.Item onPress={() => { setStreamFormat('ogg'); setAudioMenuVisible(false); }} title="OGG (transcoded)" />
+        </Menu>
+      )}
 
       <Text variant="titleSmall" style={styles.section}>
         About
