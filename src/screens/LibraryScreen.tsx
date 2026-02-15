@@ -10,7 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import ArtworkImage from '../components/ArtworkImage';
+import ArtworkImage, { ArtworkPlaceholder } from '../components/ArtworkImage';
 import { usePlayerStore } from '../store/playerStore';
 import type { Track } from '../store/playerStore';
 import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
@@ -18,7 +18,7 @@ import { groupAlbums } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
 
 type RootStackParamList = {
-  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
   AlbumDetail: { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
   TrackDetail: { trackId: number };
 };
@@ -105,22 +105,40 @@ export default function LibraryScreen() {
     queryKey: ['artists', sortBy.artists, order],
     queryFn: () => api.getArtists({ limit: 500, sort_by: sortBy.artists, order }),
   });
-  const groupedArtists = useMemo(() => {
+  const { groupedArtists, usePlaceholderArtistIds } = useMemo(() => {
     let raw = artistsRaw || [];
     if (!displayArtistsWithoutArtwork) {
-      raw = raw.filter((a: { artwork_path?: string | null }) => !!a.artwork_path);
+      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork === true);
     }
+    const usePlaceholderArtistIds = new Set<number>();
+    if (!groupCollaborationsByPrimary) {
+      const byTitle = new Map<string, { id: number }[]>();
+      for (const a of raw as { id: number; primary_album_title?: string | null }[]) {
+        const t = (a.primary_album_title || '').trim().toLowerCase();
+        if (t) {
+          if (!byTitle.has(t)) byTitle.set(t, []);
+          byTitle.get(t)!.push({ id: a.id });
+        }
+      }
+      for (const [, items] of byTitle) {
+        if (items.length >= 3) {
+          for (const { id } of items) usePlaceholderArtistIds.add(id);
+        }
+      }
+    }
+    let groups: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }[];
     if (groupCollaborationsByPrimary) {
-      return groupArtistsByPrimaryName(raw);
-    }
-    if (!groupArtistsByCapitalization) {
-      return raw.map((a: { id: number; name: string }) => ({
+      groups = groupArtistsByPrimaryName(raw);
+    } else if (!groupArtistsByCapitalization) {
+      groups = (raw as { id: number; name: string }[]).map((a) => ({
         displayName: a.name,
         primaryId: a.id,
         artistIds: [a.id],
       }));
+    } else {
+      groups = groupArtistsByNormalizedName(raw);
     }
-    return groupArtistsByNormalizedName(raw);
+    return { groupedArtists: groups, usePlaceholderArtistIds };
   }, [artistsRaw, displayArtistsWithoutArtwork, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
   const { data: albumsRaw } = useQuery({
     queryKey: ['albums', sortBy.albums, order],
@@ -209,18 +227,22 @@ export default function LibraryScreen() {
     </Menu>
   );
 
-  const renderArtistCard = (g: { displayName: string; primaryId: number; artistIds: number[] }, index: number) => (
+  const renderArtistCard = (g: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }, index: number) => (
     <TouchableOpacity
       key={g.primaryId}
       style={[styles.card, { width: cardWidth, marginLeft: index % cardsPerRow === 0 ? 0 : CARD_GAP }]}
       onPress={() =>
-        navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName })
+        navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName, isAssortedArtists: g.isAssortedArtists })
       }
       activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`View ${g.displayName}`}
     >
-      <ArtworkImage type="artist" id={g.primaryId} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
+      {usePlaceholderArtistIds.has(g.primaryId) ? (
+        <ArtworkPlaceholder size={cardWidth} style={[styles.cardArtwork, { borderRadius: CARD_RADIUS }]} />
+      ) : (
+        <ArtworkImage type="artist" id={g.primaryId} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
+      )}
       <Text variant="bodyMedium" numberOfLines={2} style={styles.cardTitle}>
         {g.displayName}
       </Text>

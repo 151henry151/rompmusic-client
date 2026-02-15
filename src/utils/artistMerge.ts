@@ -28,35 +28,97 @@ function pickCanonicalName(names: string[]): string {
   return names[0];
 }
 
-/**
- * Extract the primary artist name (text before the first comma).
- * "The Movement, Elliot Martin" -> "The Movement"
- * "The Movement" -> "The Movement"
- */
-export function getPrimaryArtistName(name: string): string {
-  const idx = name.indexOf(',');
-  return idx >= 0 ? name.slice(0, idx).trim() : name.trim();
-}
+/** Patterns for featured artists (case-insensitive): Feat., ft., Featuring, etc. */
+const FEAT_PATTERN = /\s+(?:feat\.?|ft\.?|featuring)\s+/i;
+
+/** Ensemble suffixes to strip: "The Charlie Parker Sextet" -> "Charlie Parker" */
+const ENSEMBLE_SUFFIXES = /\s+(?:sextet|septet|quintet|quartet|nonet|trio)\s*$/i;
+
+/** "X & His/Her Orchestra" -> "X" */
+const HIS_ORCHESTRA_PATTERN = /\s+&\s+(?:his|her)\s+.+$/i;
 
 /**
- * Group artists by primary name (text before first comma). Collapses collaborations:
- * "The Movement, Elliot Martin" and "The Movement, Collie Budz, Bobby Hustle" -> one "The Movement" group.
+ * Extract the primary artist name for grouping.
+ * Handles: commas, Feat./ft., ensembles (Sextet/Quintet etc), "& His Orchestra".
+ * "The Movement, Elliot Martin" -> "The Movement"
+ * "The Movement Feat. Iration" -> "The Movement"
+ * "The Charlie Parker Sextet" -> "Charlie Parker"
+ * "The Miles Davis Quintet" -> "Miles Davis"
+ * "Xavier Cugat & His Waldorf-Astoria Orchestra" -> "Xavier Cugat"
  */
-export function groupArtistsByPrimaryName<T extends ArtistLike & { artwork_path?: string | null }>(
+export function getPrimaryArtistName(name: string): string {
+  let s = name.trim();
+  if (!s) return '';
+
+  const commaIdx = s.indexOf(',');
+  if (commaIdx >= 0) s = s.slice(0, commaIdx).trim();
+
+  const featMatch = s.match(FEAT_PATTERN);
+  if (featMatch) s = s.slice(0, s.toLowerCase().indexOf(featMatch[0].toLowerCase())).trim();
+
+  const orchestraMatch = s.match(HIS_ORCHESTRA_PATTERN);
+  if (orchestraMatch) s = s.slice(0, s.indexOf(orchestraMatch[0])).trim();
+
+  const ensembleMatch = s.match(ENSEMBLE_SUFFIXES);
+  if (ensembleMatch) {
+    s = s.slice(0, s.length - ensembleMatch[0].length).trim();
+    if (s.startsWith('The ') && s.length > 4) {
+      s = s.slice(4).trim();
+    }
+  }
+
+  return s.trim() || name.trim();
+}
+
+const ASSORTED_ARTISTS = 'Assorted Artists';
+const COMPILATION_MIN_ARTISTS = 3;
+
+export type ArtistGroup = {
+  displayName: string;
+  artistIds: number[];
+  primaryId: number;
+  items: (ArtistLike & { has_artwork?: boolean | null; primary_album_id?: number | null; primary_album_title?: string | null })[];
+  isAssortedArtists?: boolean;
+};
+
+/**
+ * Group artists by primary name. Collapses collaborations, ensembles, and compilation artists.
+ * - "The Movement, Elliot Martin" and "The Movement Feat. Iration" -> "The Movement"
+ * - "The Charlie Parker Sextet" and "The Charlie Parker Septet" -> "Charlie Parker"
+ * - Artists from multi-artist compilations (3+ sharing same album title) -> "Assorted Artists"
+ */
+export function groupArtistsByPrimaryName<T extends ArtistLike & { has_artwork?: boolean | null; primary_album_id?: number | null; primary_album_title?: string | null }>(
   artists: T[]
-): { displayName: string; artistIds: number[]; primaryId: number; items: T[] }[] {
-  const byKey = new Map<string, T[]>();
+): ArtistGroup[] {
+  const byAlbumTitle = new Map<string, T[]>();
   for (const a of artists) {
+    const title = (a.primary_album_title || '').trim().toLowerCase();
+    if (title) {
+      if (!byAlbumTitle.has(title)) byAlbumTitle.set(title, []);
+      byAlbumTitle.get(title)!.push(a);
+    }
+  }
+  const compilationArtistIds = new Set<number>();
+  for (const [, items] of byAlbumTitle) {
+    if (items.length >= COMPILATION_MIN_ARTISTS) {
+      for (const a of items) compilationArtistIds.add(a.id);
+    }
+  }
+
+  const regular = artists.filter((a) => !compilationArtistIds.has(a.id));
+  const byKey = new Map<string, T[]>();
+  for (const a of regular) {
     const primary = getPrimaryArtistName(a.name);
     if (!primary) continue;
     const key = primary.toLowerCase();
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(a);
   }
-  return Array.from(byKey.entries()).map(([, items]) => {
+
+  const groups: ArtistGroup[] = Array.from(byKey.entries()).map(([, items]) => {
     const artistIds = items.map((i) => i.id);
-    const displayName = getPrimaryArtistName(items[0].name); // Use first as canonical form
-    const primary = items.find((i) => i.artwork_path) ?? items[0];
+    const displayName = getPrimaryArtistName(items[0].name);
+    const primary = items.find((i) => i.has_artwork) ?? items[0];
     return {
       displayName,
       artistIds,
@@ -64,6 +126,20 @@ export function groupArtistsByPrimaryName<T extends ArtistLike & { artwork_path?
       items,
     };
   });
+
+  if (compilationArtistIds.size > 0) {
+    const compItems = artists.filter((a) => compilationArtistIds.has(a.id));
+    const primary = compItems.find((i) => i.has_artwork && i.primary_album_id) ?? compItems[0];
+    groups.push({
+      displayName: ASSORTED_ARTISTS,
+      artistIds: compItems.map((i) => i.id),
+      primaryId: primary.id,
+      items: compItems,
+      isAssortedArtists: true,
+    });
+  }
+
+  return groups;
 }
 
 /**

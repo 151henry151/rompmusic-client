@@ -11,13 +11,13 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
-import ArtworkImage from '../components/ArtworkImage';
+import ArtworkImage, { ArtworkPlaceholder } from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
 import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
 import { useSettingsStore } from '../store/settingsStore';
 
 type RootStackParamList = {
-  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
   TrackDetail: { trackId: number };
   AlbumDetail: { albumId: number; highlightTrackId?: number };
 };
@@ -85,22 +85,40 @@ export default function HomeScreen() {
     queryKey: ['artists', 'home'],
     queryFn: () => api.getArtists({ limit: 100, home: true }),
   });
-  const groupedArtists = useMemo(() => {
+  const { groupedArtists, usePlaceholderArtistIds } = useMemo(() => {
     let raw = artistsRaw || [];
     if (!displayArtistsWithoutArtwork) {
-      raw = raw.filter((a: { artwork_path?: string | null }) => !!a.artwork_path);
+      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork === true);
     }
+    const usePlaceholderArtistIds = new Set<number>();
+    if (!groupCollaborationsByPrimary) {
+      const byTitle = new Map<string, { id: number }[]>();
+      for (const a of raw as { id: number; primary_album_title?: string | null }[]) {
+        const t = (a.primary_album_title || '').trim().toLowerCase();
+        if (t) {
+          if (!byTitle.has(t)) byTitle.set(t, []);
+          byTitle.get(t)!.push({ id: a.id });
+        }
+      }
+      for (const [, items] of byTitle) {
+        if (items.length >= 3) {
+          for (const { id } of items) usePlaceholderArtistIds.add(id);
+        }
+      }
+    }
+    let groups: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }[];
     if (groupCollaborationsByPrimary) {
-      return groupArtistsByPrimaryName(raw);
-    }
-    if (!groupArtistsByCapitalization) {
-      return raw.map((a: { id: number; name: string }) => ({
+      groups = groupArtistsByPrimaryName(raw);
+    } else if (!groupArtistsByCapitalization) {
+      groups = (raw as { id: number; name: string }[]).map((a) => ({
         displayName: a.name,
         primaryId: a.id,
         artistIds: [a.id],
       }));
+    } else {
+      groups = groupArtistsByNormalizedName(raw);
     }
-    return groupArtistsByNormalizedName(raw);
+    return { groupedArtists: groups, usePlaceholderArtistIds };
   }, [artistsRaw, displayArtistsWithoutArtwork, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
   const { data: recentlyAdded, isLoading: recentLoading } = useQuery({
     queryKey: ['recently-added'],
@@ -166,11 +184,18 @@ export default function HomeScreen() {
           <List.Item
             key={g.primaryId}
             title={g.displayName}
-            left={() => <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artistArtwork} />}
-            onPress={() =>
+            left={() =>
+                usePlaceholderArtistIds.has(g.primaryId) ? (
+                  <ArtworkPlaceholder size={48} style={styles.artistArtwork} />
+                ) : (
+                  <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artistArtwork} />
+                )
+              }
+              onPress={() =>
               navigation.navigate('ArtistDetail', {
                 artistIds: g.artistIds,
                 artistName: g.displayName,
+                isAssortedArtists: g.isAssortedArtists,
               })
             }
             right={(props) => <List.Icon {...props} icon="chevron-right" />}

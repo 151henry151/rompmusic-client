@@ -15,7 +15,7 @@ import ArtworkImage from '../components/ArtworkImage';
 
 type ArtistDetailParams =
   | { artistId: number; artistName: string }
-  | { artistIds: number[]; artistName: string };
+  | { artistIds: number[]; artistName: string; isAssortedArtists?: boolean };
 type RootStackParamList = {
   ArtistDetail: ArtistDetailParams;
   AlbumDetail: { albumId: number; highlightTrackId?: number };
@@ -28,6 +28,7 @@ export default function ArtistDetailScreen() {
   const artistIds = 'artistIds' in params ? params.artistIds : [params.artistId];
   const artistName = params.artistName;
   const primaryId = artistIds[0];
+  const isAssortedArtists = 'isAssortedArtists' in params && params.isAssortedArtists;
 
   const albumQueries = useQueries({
     queries: artistIds.map((id) => ({
@@ -37,18 +38,24 @@ export default function ArtistDetailScreen() {
   });
   const albums = useMemo(() => {
     const seen = new Set<number>();
+    const seenTitles = new Set<string>();
     const out: { id: number; title: string; year?: number }[] = [];
     for (const q of albumQueries) {
       if (!q.data) continue;
       for (const a of q.data) {
-        if (!seen.has(a.id)) {
+        const key = isAssortedArtists ? (a.title || '').toLowerCase() : a.id;
+        if (isAssortedArtists) {
+          if (seenTitles.has(key)) continue;
+          seenTitles.add(key);
+        } else {
+          if (seen.has(a.id)) continue;
           seen.add(a.id);
-          out.push(a);
         }
+        out.push(a);
       }
     }
     return out;
-  }, [albumQueries]);
+  }, [albumQueries, isAssortedArtists]);
   const playTrack = usePlayerStore((s) => s.playTrack);
 
   const handleAlbumPress = (albumId: number) => {

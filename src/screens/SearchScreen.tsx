@@ -75,7 +75,11 @@ export default function SearchScreen() {
               title={g.displayName}
               left={() => <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artwork} />}
               onPress={() =>
-                navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName })
+                navigation.navigate('ArtistDetail', {
+                  artistIds: g.artistIds,
+                  artistName: g.displayName,
+                  isAssortedArtists: (g as { isAssortedArtists?: boolean }).isAssortedArtists,
+                })
               }
               right={(props) => <List.Icon {...props} icon="chevron-right" />}
               style={styles.item}
