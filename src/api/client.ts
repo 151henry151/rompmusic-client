@@ -76,8 +76,16 @@ export const api = {
     return fetchApi('/auth/me');
   },
 
-  getStreamUrl(trackId: number) {
-    return `${API_BASE.replace('/api/v1', '')}/api/v1/stream/${trackId}`;
+  getStreamUrl(trackId: number, format?: 'original' | 'ogg') {
+    const base = `${API_BASE.replace('/api/v1', '')}/api/v1/stream/${trackId}`;
+    if (format && format !== 'original') {
+      return base + (base.includes('?') ? '&' : '?') + 'format=' + encodeURIComponent(format);
+    }
+    return base;
+  },
+
+  async getClientConfig() {
+    return fetchApi('/config/client') as Promise<{ client_settings: Record<string, { visible: boolean; default: boolean | string; allowed?: string[] }> }>;
   },
 
   getArtworkUrl(type: 'album' | 'artist', id: number) {

@@ -11,6 +11,7 @@ import { configureFonts, MD2DarkTheme, PaperProvider } from 'react-native-paper'
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { useAuthStore } from './src/store/authStore';
+import { useSettingsStore } from './src/store/settingsStore';
 import { initAudio } from './src/services/audioService';
 
 const queryClient = new QueryClient();
@@ -43,11 +44,13 @@ const theme = {
 
 function AppContent() {
   const restoreSession = useAuthStore((s) => s.restoreSession);
+  const restoreSettings = useSettingsStore((s) => s.restoreSettings);
 
   useEffect(() => {
     initAudio().catch(() => {});
     restoreSession();
-  }, [restoreSession]);
+    restoreSettings();
+  }, [restoreSession, restoreSettings]);
 
   return <AppNavigator />;
 }

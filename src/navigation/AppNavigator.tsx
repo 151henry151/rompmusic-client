@@ -27,6 +27,7 @@ import TrackDetailScreen from '../screens/TrackDetailScreen';
 import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore, type Track } from '../store/playerStore';
+import { useSettingsStore } from '../store/settingsStore';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -80,6 +81,11 @@ function AuthenticatedLayout() {
   const [showPlayer, setShowPlayer] = React.useState(false);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const prevTrackRef = React.useRef<Track | null>(null);
+  const restoreSettings = useSettingsStore((s) => s.restoreSettings);
+
+  React.useEffect(() => {
+    restoreSettings();
+  }, [restoreSettings]);
 
   React.useEffect(() => {
     if (currentTrack && !prevTrackRef.current) {
