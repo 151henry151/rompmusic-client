@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions } from 'react-native';
-import { SegmentedButtons, Text, IconButton, Menu, Divider } from 'react-native-paper';
+import { SegmentedButtons, Text, IconButton, Menu, Divider, List, Switch } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
@@ -13,11 +13,13 @@ import { api } from '../api/client';
 import ArtworkImage from '../components/ArtworkImage';
 import { usePlayerStore } from '../store/playerStore';
 import type { Track } from '../store/playerStore';
-import { groupArtistsByNormalizedName } from '../utils/artistMerge';
+import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
+import { groupAlbums } from '../utils/albumGrouping';
+import { useSettingsStore } from '../store/settingsStore';
 
 type RootStackParamList = {
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
-  AlbumDetail: { albumId: number; highlightTrackId?: number };
+  AlbumDetail: { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
   TrackDetail: { trackId: number };
 };
 
@@ -82,6 +84,14 @@ export default function LibraryScreen() {
 
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const groupArtistsByCapitalization = useSettingsStore((s) => s.getEffectiveGroupArtistsByCapitalization());
+  const groupCollaborationsByPrimary = useSettingsStore((s) => s.getEffectiveGroupCollaborationsByPrimary());
+  const setGroupCollaborationsByPrimary = useSettingsStore((s) => s.setGroupCollaborationsByPrimary);
+  const isSettingVisible = useSettingsStore((s) => s.isSettingVisible);
+  const displayAlbumsWithoutArtwork = useSettingsStore((s) => s.getEffectiveDisplayAlbumsWithoutArtwork());
+  const setDisplayAlbumsWithoutArtwork = useSettingsStore((s) => s.setDisplayAlbumsWithoutArtwork);
+  const displayArtistsWithoutArtwork = useSettingsStore((s) => s.getEffectiveDisplayArtistsWithoutArtwork());
+  const setDisplayArtistsWithoutArtwork = useSettingsStore((s) => s.setDisplayArtistsWithoutArtwork);
   const { width } = useWindowDimensions();
 
   const isMobile = width < MOBILE_BREAKPOINT;
@@ -95,14 +105,35 @@ export default function LibraryScreen() {
     queryKey: ['artists', sortBy.artists, order],
     queryFn: () => api.getArtists({ limit: 500, sort_by: sortBy.artists, order }),
   });
-  const groupedArtists = useMemo(
-    () => groupArtistsByNormalizedName(artistsRaw || []),
-    [artistsRaw]
-  );
-  const { data: albums } = useQuery({
+  const groupedArtists = useMemo(() => {
+    let raw = artistsRaw || [];
+    if (!displayArtistsWithoutArtwork) {
+      raw = raw.filter((a: { artwork_path?: string | null }) => !!a.artwork_path);
+    }
+    if (groupCollaborationsByPrimary) {
+      return groupArtistsByPrimaryName(raw);
+    }
+    if (!groupArtistsByCapitalization) {
+      return raw.map((a: { id: number; name: string }) => ({
+        displayName: a.name,
+        primaryId: a.id,
+        artistIds: [a.id],
+      }));
+    }
+    return groupArtistsByNormalizedName(raw);
+  }, [artistsRaw, displayArtistsWithoutArtwork, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
+  const { data: albumsRaw } = useQuery({
     queryKey: ['albums', sortBy.albums, order],
     queryFn: () => api.getAlbums({ limit: 500, sort_by: sortBy.albums, order }),
   });
+  const albums = useMemo(() => {
+    const list = albumsRaw || [];
+    if (!displayAlbumsWithoutArtwork) {
+      return list.filter((a: { has_artwork?: boolean | null }) => a.has_artwork === true);
+    }
+    return list;
+  }, [albumsRaw, displayAlbumsWithoutArtwork]);
+  const albumGroups = useMemo(() => groupAlbums(albums), [albums]);
   const { data: tracks } = useQuery({
     queryKey: ['tracks', sortBy.songs, order],
     queryFn: () => api.getTracks({ limit: 1000, sort_by: sortBy.songs, order }),
@@ -110,16 +141,21 @@ export default function LibraryScreen() {
 
   const albumsGroupedByDecade = useMemo(() => {
     if (sortBy.albums !== 'year') return null;
-    return groupByDecade(albums || []);
-  }, [albums, sortBy.albums]);
+    const groupsWithYear = albumGroups.map((g) => ({ ...g, year: g.primaryAlbum.year }));
+    return groupByDecade(groupsWithYear);
+  }, [albumGroups, sortBy.albums]);
 
   const tracksGroupedByDecade = useMemo(() => {
     if (sortBy.songs !== 'year') return null;
     return groupByDecade(tracks || []);
   }, [tracks, sortBy.songs]);
 
-  const handleAlbumPress = (albumId: number) => {
-    navigation.navigate('AlbumDetail', { albumId });
+  const handleAlbumPress = (group: { albumIds: number[] }) => {
+    if (group.albumIds.length === 1) {
+      navigation.navigate('AlbumDetail', { albumId: group.albumIds[0] });
+    } else {
+      navigation.navigate('AlbumDetail', { albumIds: group.albumIds });
+    }
   };
 
   const handleTrackPlay = (track: Track & { album_title?: string; artist_name?: string }, queue: typeof tracks) => {
@@ -192,69 +228,58 @@ export default function LibraryScreen() {
   );
 
   const renderAlbumCard = (
-    a: { id: number; title: string; artist_name?: string; year?: number | null },
+    g: { displayTitle: string; albumIds: number[]; primaryAlbum: { id: number }; artistNames: string },
     index: number
   ) => (
     <TouchableOpacity
-      key={a.id}
+      key={g.albumIds.join('-')}
       style={[styles.card, { width: cardWidth, marginLeft: index % cardsPerRow === 0 ? 0 : CARD_GAP }]}
-      onPress={() => handleAlbumPress(a.id)}
+      onPress={() => handleAlbumPress(g)}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`View album ${a.title}`}
+      accessibilityLabel={`View album ${g.displayTitle}`}
     >
-      <ArtworkImage type="album" id={a.id} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
+      <ArtworkImage type="album" id={g.primaryAlbum.id} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
       <Text variant="bodyMedium" numberOfLines={2} style={styles.cardTitle}>
-        {a.title}
+        {g.displayTitle}
       </Text>
       <Text variant="bodySmall" numberOfLines={1} style={styles.cardSubtitle}>
-        {a.artist_name || 'Unknown'}
+        {g.artistNames}
       </Text>
     </TouchableOpacity>
   );
 
-  const renderTrackCard = (
+  const renderTrackListRow = (
     t: { id: number; title: string; artist_name?: string; album_id: number; album_title?: string },
-    index: number,
     list: typeof tracks
   ) => (
-    <TouchableOpacity
+    <List.Item
       key={t.id}
-      style={[styles.card, { width: cardWidth, marginLeft: index % cardsPerRow === 0 ? 0 : CARD_GAP }]}
+      title={t.title}
+      description={`${t.artist_name || 'Unknown'} • ${t.album_title || 'Unknown'}`}
+      left={() => (
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            handleTrackPlay(t as any, list);
+          }}
+          style={styles.trackListArtworkWrap}
+          activeOpacity={0.8}
+        >
+          <ArtworkImage type="album" id={t.album_id} size={48} borderRadius={6} style={styles.trackListArtwork} />
+          <View style={styles.trackListPlayOverlay} pointerEvents="none">
+            <IconButton icon="play" size={24} iconColor="#fff" />
+          </View>
+        </TouchableOpacity>
+      )}
       onPress={() => (navigation as any).navigate('TrackDetail', { trackId: t.id })}
-      activeOpacity={0.7}
+      style={styles.trackListItem}
       accessibilityRole="button"
       accessibilityLabel={`Play ${t.title}`}
-    >
-      <TouchableOpacity
-        onPress={(e) => {
-          e.stopPropagation();
-          handleTrackPlay(t as any, list);
-        }}
-        style={styles.trackArtworkWrap}
-        activeOpacity={0.8}
-      >
-        <ArtworkImage
-          type="album"
-          id={t.album_id}
-          size={cardWidth}
-          borderRadius={CARD_RADIUS}
-          style={styles.cardArtwork}
-        />
-        <View style={styles.playOverlay} pointerEvents="none">
-          <IconButton icon="play" size={36} iconColor="#fff" />
-        </View>
-      </TouchableOpacity>
-      <Text variant="bodyMedium" numberOfLines={2} style={styles.cardTitle}>
-        {t.title}
-      </Text>
-      <Text variant="bodySmall" numberOfLines={1} style={styles.cardSubtitle}>
-        {t.artist_name || 'Unknown'}
-      </Text>
-    </TouchableOpacity>
+    />
   );
 
-  const renderSection = (title: string, items: any[], renderCard: (item: any, index: number, list?: any) => JSX.Element) => (
+  const renderAlbumSection = (title: string, items: any[], renderCard: (item: any, index: number, list?: any) => JSX.Element) => (
     <View style={styles.decadeSection} key={title}>
       <Text variant="titleSmall" style={styles.decadeHeader}>
         {title}
@@ -262,6 +287,15 @@ export default function LibraryScreen() {
       <View style={styles.grid}>
         {items.map((item, i) => renderCard(item, i, items))}
       </View>
+    </View>
+  );
+
+  const renderSongsSection = (title: string, items: any[]) => (
+    <View style={styles.decadeSection} key={title}>
+      <Text variant="titleSmall" style={styles.decadeHeader}>
+        {title}
+      </Text>
+      {items.map((t) => renderTrackListRow(t, items))}
     </View>
   );
 
@@ -279,6 +313,49 @@ export default function LibraryScreen() {
           style={styles.segmented}
         />
         <View style={styles.sortWrap}>
+          {tab === 'artists' && (
+            <>
+              {isSettingVisible('display_artists_without_artwork') && (
+                <View style={styles.inlineToggle}>
+                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
+                    No art
+                  </Text>
+                  <Switch
+                    value={displayArtistsWithoutArtwork}
+                    onValueChange={setDisplayArtistsWithoutArtwork}
+                    color="#4a9eff"
+                    style={styles.inlineSwitch}
+                  />
+                </View>
+              )}
+              {isSettingVisible('group_collaborations_by_primary') && (
+                <View style={styles.inlineToggle}>
+                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
+                    Group collab
+                  </Text>
+                  <Switch
+                    value={groupCollaborationsByPrimary}
+                    onValueChange={setGroupCollaborationsByPrimary}
+                    color="#4a9eff"
+                    style={styles.inlineSwitch}
+                  />
+                </View>
+              )}
+            </>
+          )}
+          {tab === 'albums' && isSettingVisible('display_albums_without_artwork') && (
+            <View style={styles.inlineToggle}>
+              <Text variant="labelSmall" style={styles.inlineToggleLabel}>
+                No art
+              </Text>
+              <Switch
+                value={displayAlbumsWithoutArtwork}
+                onValueChange={setDisplayAlbumsWithoutArtwork}
+                color="#4a9eff"
+                style={styles.inlineSwitch}
+              />
+            </View>
+          )}
           {renderSortMenu()}
         </View>
       </View>
@@ -291,21 +368,19 @@ export default function LibraryScreen() {
 
       {tab === 'albums' &&
         (albumsGroupedByDecade
-          ? albumsGroupedByDecade.map((g) => renderSection(g.decade, g.items, renderAlbumCard))
+          ? albumsGroupedByDecade.map((g) => renderAlbumSection(g.decade, g.items, renderAlbumCard))
           : (
             <View style={styles.grid}>
-              {(albums || []).map((a, i) => renderAlbumCard(a, i))}
+              {albumGroups.map((g, i) => renderAlbumCard(g, i))}
             </View>
           ))}
 
       {tab === 'songs' &&
         (tracksGroupedByDecade
-          ? tracksGroupedByDecade.map((g) =>
-              renderSection(g.decade, g.items, (item, i, list) => renderTrackCard(item, i, list || g.items))
-            )
+          ? tracksGroupedByDecade.map((g) => renderSongsSection(g.decade, g.items))
           : (
-            <View style={styles.grid}>
-              {(tracks || []).map((t, i) => renderTrackCard(t, i, tracks || []))}
+            <View style={styles.songsList}>
+              {(tracks || []).map((t) => renderTrackListRow(t, tracks || []))}
             </View>
           ))}
     </ScrollView>
@@ -328,8 +403,22 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   sortWrap: {
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     paddingRight: 8,
+    gap: 8,
+  },
+  inlineToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inlineToggleLabel: {
+    color: '#888',
+    marginRight: 4,
+  },
+  inlineSwitch: {
+    transform: [{ scale: 0.9 }],
   },
   grid: {
     flexDirection: 'row',
@@ -352,10 +441,20 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 2,
   },
-  trackArtworkWrap: {
-    position: 'relative',
+  songsList: {
+    paddingHorizontal: HORIZONTAL_PADDING,
   },
-  playOverlay: {
+  trackListItem: {
+    backgroundColor: '#1a1a1a',
+  },
+  trackListArtworkWrap: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  trackListArtwork: {
+    overflow: 'hidden',
+  },
+  trackListPlayOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -364,7 +463,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: CARD_RADIUS,
+    borderRadius: 6,
   },
   decadeSection: {
     marginBottom: 24,
