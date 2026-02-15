@@ -13,7 +13,8 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
-import { groupArtistsByNormalizedName } from '../utils/artistMerge';
+import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
+import { useSettingsStore } from '../store/settingsStore';
 
 type RootStackParamList = {
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
@@ -76,15 +77,31 @@ function TrackCardSection({
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const displayArtistsWithoutArtwork = useSettingsStore((s) => s.getEffectiveDisplayArtistsWithoutArtwork());
+  const groupArtistsByCapitalization = useSettingsStore((s) => s.getEffectiveGroupArtistsByCapitalization());
+  const groupCollaborationsByPrimary = useSettingsStore((s) => s.getEffectiveGroupCollaborationsByPrimary());
 
   const { data: artistsRaw, isLoading: artistsLoading } = useQuery({
     queryKey: ['artists', 'home'],
     queryFn: () => api.getArtists({ limit: 100, home: true }),
   });
-  const groupedArtists = useMemo(
-    () => groupArtistsByNormalizedName(artistsRaw || []),
-    [artistsRaw]
-  );
+  const groupedArtists = useMemo(() => {
+    let raw = artistsRaw || [];
+    if (!displayArtistsWithoutArtwork) {
+      raw = raw.filter((a: { artwork_path?: string | null }) => !!a.artwork_path);
+    }
+    if (groupCollaborationsByPrimary) {
+      return groupArtistsByPrimaryName(raw);
+    }
+    if (!groupArtistsByCapitalization) {
+      return raw.map((a: { id: number; name: string }) => ({
+        displayName: a.name,
+        primaryId: a.id,
+        artistIds: [a.id],
+      }));
+    }
+    return groupArtistsByNormalizedName(raw);
+  }, [artistsRaw, displayArtistsWithoutArtwork, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
   const { data: recentlyAdded, isLoading: recentLoading } = useQuery({
     queryKey: ['recently-added'],
     queryFn: () => api.getRecentlyAdded(10),

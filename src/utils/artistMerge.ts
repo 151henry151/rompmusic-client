@@ -29,6 +29,44 @@ function pickCanonicalName(names: string[]): string {
 }
 
 /**
+ * Extract the primary artist name (text before the first comma).
+ * "The Movement, Elliot Martin" -> "The Movement"
+ * "The Movement" -> "The Movement"
+ */
+export function getPrimaryArtistName(name: string): string {
+  const idx = name.indexOf(',');
+  return idx >= 0 ? name.slice(0, idx).trim() : name.trim();
+}
+
+/**
+ * Group artists by primary name (text before first comma). Collapses collaborations:
+ * "The Movement, Elliot Martin" and "The Movement, Collie Budz, Bobby Hustle" -> one "The Movement" group.
+ */
+export function groupArtistsByPrimaryName<T extends ArtistLike & { artwork_path?: string | null }>(
+  artists: T[]
+): { displayName: string; artistIds: number[]; primaryId: number; items: T[] }[] {
+  const byKey = new Map<string, T[]>();
+  for (const a of artists) {
+    const primary = getPrimaryArtistName(a.name);
+    if (!primary) continue;
+    const key = primary.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(a);
+  }
+  return Array.from(byKey.entries()).map(([, items]) => {
+    const artistIds = items.map((i) => i.id);
+    const displayName = getPrimaryArtistName(items[0].name); // Use first as canonical form
+    const primary = items.find((i) => i.artwork_path) ?? items[0];
+    return {
+      displayName,
+      artistIds,
+      primaryId: primary.id,
+      items,
+    };
+  });
+}
+
+/**
  * Group artists by normalized name (case-insensitive) and return one entry per group.
  * Each group uses a canonical display name and includes all artist IDs for that group.
  */
