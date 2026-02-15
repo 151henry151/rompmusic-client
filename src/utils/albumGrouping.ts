@@ -7,6 +7,8 @@
  * 2. Multi-disc albums (e.g. "GRRR! (Super Deluxe) (1)", "(2)", "(3)")
  */
 
+import { getPrimaryArtistName } from './artistMerge';
+
 export interface AlbumLike {
   id: number;
   title: string;
@@ -70,6 +72,87 @@ export function groupAlbums<T extends AlbumLike>(albums: T[]): {
       primaryAlbum,
       albums: items,
       artistNames,
+    };
+  });
+}
+
+export type AlbumGroup = {
+  displayTitle: string;
+  albumIds: number[];
+  primaryAlbum: AlbumLike;
+  albums: AlbumLike[];
+  artistNames: string;
+  usePlaceholderArtwork?: boolean;
+};
+
+/**
+ * Group albums with collaboration logic: by primary artist + title + year.
+ * Merges "Kind of Blue" by "Miles Davis" and "Miles Davis Quintet".
+ * Ensures no duplicate titles or artwork in the final list.
+ */
+export function groupAlbumsWithCollab<T extends AlbumLike>(albums: T[]): AlbumGroup[] {
+  const byKey = new Map<string, T[]>();
+  for (const a of albums) {
+    const primaryArtist = getPrimaryArtistName(a.artist_name || 'Unknown').toLowerCase().trim() || '\0';
+    const key = `${primaryArtist}|${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(a);
+  }
+
+  let groups: AlbumGroup[] = Array.from(byKey.entries()).map(([, items]) => {
+    const displayTitle = getAlbumDisplayTitle(items[0].title);
+    const albumIds = items.map((i) => i.id);
+    const artistNames = [...new Set(items.map((i) => i.artist_name || 'Unknown'))].join(', ');
+    const primaryAlbum = items.find((i) => i.has_artwork) ?? items[0];
+    return {
+      displayTitle,
+      albumIds,
+      primaryAlbum,
+      albums: items,
+      artistNames,
+    };
+  });
+
+  groups = mergeDuplicateAlbumTitles(groups);
+  return deduplicateAlbumArtwork(groups);
+}
+
+function mergeDuplicateAlbumTitles(groups: AlbumGroup[]): AlbumGroup[] {
+  const byTitle = new Map<string, AlbumGroup>();
+  for (const g of groups) {
+    const key = `${g.displayTitle.toLowerCase().trim()}|${g.primaryAlbum.year ?? ''}`;
+    const existing = byTitle.get(key);
+    if (existing) {
+      const allAlbums = [...existing.albums, ...g.albums];
+      const primaryAlbum = allAlbums.find((i) => i.has_artwork) ?? allAlbums[0];
+      byTitle.set(key, {
+        displayTitle: existing.displayTitle,
+        albumIds: [...new Set([...existing.albumIds, ...g.albumIds])],
+        primaryAlbum,
+        albums: allAlbums,
+        artistNames: [...new Set([...(existing.artistNames?.split(', ') || []), ...(g.artistNames?.split(', ') || [])])].join(', '),
+      });
+    } else {
+      byTitle.set(key, { ...g });
+    }
+  }
+  return Array.from(byTitle.values());
+}
+
+function deduplicateAlbumArtwork(groups: AlbumGroup[]): AlbumGroup[] {
+  const usedAlbumIds = new Set<number>();
+  return groups.map((g) => {
+    const albums = g.albums;
+    const primaryAlbum =
+      albums.find((i) => i.has_artwork && !usedAlbumIds.has(i.id)) ??
+      albums.find((i) => !usedAlbumIds.has(i.id)) ??
+      albums[0];
+    const usePlaceholderArtwork = usedAlbumIds.has(primaryAlbum.id);
+    if (!usePlaceholderArtwork) usedAlbumIds.add(primaryAlbum.id);
+    return {
+      ...g,
+      primaryAlbum,
+      usePlaceholderArtwork,
     };
   });
 }

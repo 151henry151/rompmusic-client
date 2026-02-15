@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -12,6 +12,7 @@ import { useAuthStore } from '../store/authStore';
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const passwordRef = useRef<any>(null);
   const { login, isLoading } = useAuthStore();
   const navigation = useNavigation();
 
@@ -47,14 +48,19 @@ export default function LoginScreen() {
           autoCorrect={false}
           style={styles.input}
           disabled={isLoading}
+          returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
         <TextInput
+          ref={passwordRef}
           label="Password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           style={styles.input}
           disabled={isLoading}
+          returnKeyType="go"
+          onSubmitEditing={handleLogin}
         />
         <Button
           mode="contained"

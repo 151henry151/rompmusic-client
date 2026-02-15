@@ -88,7 +88,7 @@ export default function HomeScreen() {
   const { groupedArtists, usePlaceholderArtistIds } = useMemo(() => {
     let raw = artistsRaw || [];
     if (!displayArtistsWithoutArtwork) {
-      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork === true);
+      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork !== false);
     }
     const usePlaceholderArtistIds = new Set<number>();
     if (!groupCollaborationsByPrimary) {
@@ -185,7 +185,7 @@ export default function HomeScreen() {
             key={g.primaryId}
             title={g.displayName}
             left={() =>
-                usePlaceholderArtistIds.has(g.primaryId) ? (
+                (usePlaceholderArtistIds.has(g.primaryId) || (g as { usePlaceholderArtwork?: boolean }).usePlaceholderArtwork) ? (
                   <ArtworkPlaceholder size={48} style={styles.artistArtwork} />
                 ) : (
                   <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artistArtwork} />

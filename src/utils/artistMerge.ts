@@ -37,14 +37,33 @@ const ENSEMBLE_SUFFIXES = /\s+(?:sextet|septet|quintet|quartet|nonet|trio)\s*$/i
 /** "X & His/Her Orchestra" -> "X" */
 const HIS_ORCHESTRA_PATTERN = /\s+&\s+(?:his|her)\s+.+$/i;
 
+/** Split patterns: take first part for "X & Y", "X / Y", "X + Y", "X and the Y" */
+function splitOnCollaboration(s: string): string {
+  let first = s;
+  const patterns: { re: RegExp; skip?: (str: string) => boolean }[] = [
+    { re: /\s+and\s+the\s+/i },
+    { re: /\s+&\s+/, skip: (str) => HIS_ORCHESTRA_PATTERN.test(str) },
+    { re: /\s*\/\s*/ },
+    { re: /\s+\+\s+/ },
+  ];
+  for (const { re, skip } of patterns) {
+    const match = s.match(re);
+    if (match && (!skip || !skip(s))) {
+      const idx = s.search(re);
+      const candidate = s.slice(0, idx).trim();
+      if (candidate.length > 0) first = candidate;
+      break;
+    }
+  }
+  return first;
+}
+
 /**
  * Extract the primary artist name for grouping.
- * Handles: commas, Feat./ft., ensembles (Sextet/Quintet etc), "& His Orchestra".
- * "The Movement, Elliot Martin" -> "The Movement"
- * "The Movement Feat. Iration" -> "The Movement"
- * "The Charlie Parker Sextet" -> "Charlie Parker"
- * "The Miles Davis Quintet" -> "Miles Davis"
- * "Xavier Cugat & His Waldorf-Astoria Orchestra" -> "Xavier Cugat"
+ * Handles: commas, Feat./ft., ensembles, "& His Orchestra", "X & Y", "X / Y", "X + Y", "X and the Y".
+ * "Miles Davis & John Coltrane" -> "Miles Davis"
+ * "Miles Davis / Marcus Miller" -> "Miles Davis"
+ * "Miles Davis and the Lighthouse All-Stars" -> "Miles Davis"
  */
 export function getPrimaryArtistName(name: string): string {
   let s = name.trim();
@@ -55,6 +74,8 @@ export function getPrimaryArtistName(name: string): string {
 
   const featMatch = s.match(FEAT_PATTERN);
   if (featMatch) s = s.slice(0, s.toLowerCase().indexOf(featMatch[0].toLowerCase())).trim();
+
+  s = splitOnCollaboration(s);
 
   const orchestraMatch = s.match(HIS_ORCHESTRA_PATTERN);
   if (orchestraMatch) s = s.slice(0, s.indexOf(orchestraMatch[0])).trim();
@@ -79,6 +100,7 @@ export type ArtistGroup = {
   primaryId: number;
   items: (ArtistLike & { has_artwork?: boolean | null; primary_album_id?: number | null; primary_album_title?: string | null })[];
   isAssortedArtists?: boolean;
+  usePlaceholderArtwork?: boolean;
 };
 
 /**
@@ -105,9 +127,8 @@ export function groupArtistsByPrimaryName<T extends ArtistLike & { has_artwork?:
     }
   }
 
-  const regular = artists.filter((a) => !compilationArtistIds.has(a.id));
   const byKey = new Map<string, T[]>();
-  for (const a of regular) {
+  for (const a of artists) {
     const primary = getPrimaryArtistName(a.name);
     if (!primary) continue;
     const key = primary.toLowerCase();
@@ -117,8 +138,11 @@ export function groupArtistsByPrimaryName<T extends ArtistLike & { has_artwork?:
 
   const groups: ArtistGroup[] = Array.from(byKey.entries()).map(([, items]) => {
     const artistIds = items.map((i) => i.id);
-    const displayName = getPrimaryArtistName(items[0].name);
-    const primary = items.find((i) => i.has_artwork) ?? items[0];
+    const primaryNames = items.map((i) => getPrimaryArtistName(i.name));
+    const displayName = pickCanonicalName(primaryNames);
+    const withArt = items.find((i) => i.has_artwork);
+    const matchingName = items.find((i) => getPrimaryArtistName(i.name) === displayName);
+    const primary = withArt ?? matchingName ?? items[0];
     return {
       displayName,
       artistIds,
@@ -139,7 +163,51 @@ export function groupArtistsByPrimaryName<T extends ArtistLike & { has_artwork?:
     });
   }
 
-  return groups;
+  const deduped = deduplicateArtwork(groups);
+  return mergeDuplicateDisplayNames(deduped);
+}
+
+/** Merge any groups with the same display name (e.g. compilation "Assorted Artists" + real artist "Assorted Artists"). */
+function mergeDuplicateDisplayNames(groups: ArtistGroup[]): ArtistGroup[] {
+  const byName = new Map<string, ArtistGroup>();
+  for (const g of groups) {
+    const key = g.displayName.toLowerCase().trim() || '\0';
+    const existing = byName.get(key);
+    if (existing) {
+      const allItems = [...existing.items, ...g.items];
+      const withArt = allItems.find((i) => (i as { has_artwork?: boolean }).has_artwork);
+      const primary = withArt ?? allItems[0];
+      byName.set(key, {
+        displayName: existing.displayName,
+        artistIds: [...new Set([...existing.artistIds, ...g.artistIds])],
+        primaryId: primary.id,
+        items: allItems,
+        isAssortedArtists: existing.isAssortedArtists || g.isAssortedArtists,
+      });
+    } else {
+      byName.set(key, { ...g });
+    }
+  }
+  return deduplicateArtwork(Array.from(byName.values()));
+}
+
+/** Ensure no two groups use the same primary_album_id for artwork (no duplicate pictures). */
+function deduplicateArtwork(groups: ArtistGroup[]): ArtistGroup[] {
+  const usedAlbumIds = new Set<number | null>();
+  return groups.map((g) => {
+    const items = g.items as { id: number; primary_album_id?: number | null; has_artwork?: boolean }[];
+    const primary = items.find((i) => i.has_artwork && i.primary_album_id && !usedAlbumIds.has(i.primary_album_id!))
+      ?? items.find((i) => i.primary_album_id && !usedAlbumIds.has(i.primary_album_id))
+      ?? items[0];
+    const albumId = primary?.primary_album_id ?? null;
+    const usePlaceholderArtwork = albumId !== null && usedAlbumIds.has(albumId);
+    if (albumId !== null && !usePlaceholderArtwork) usedAlbumIds.add(albumId);
+    return {
+      ...g,
+      primaryId: primary.id,
+      usePlaceholderArtwork: usePlaceholderArtwork || false,
+    };
+  });
 }
 
 /**

@@ -15,7 +15,7 @@ import ArtworkImage, { ArtworkPlaceholder } from '../components/ArtworkImage';
 import { usePlayerStore } from '../store/playerStore';
 import type { Track } from '../store/playerStore';
 import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
-import { groupAlbums } from '../utils/albumGrouping';
+import { groupAlbums, groupAlbumsWithCollab } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
 
 type RootStackParamList = {
@@ -110,7 +110,7 @@ export default function LibraryScreen() {
   const { groupedArtists, usePlaceholderArtistIds } = useMemo(() => {
     let raw = artistsRaw || [];
     if (!displayArtistsWithoutArtwork) {
-      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork === true);
+      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork !== false);
     }
     const usePlaceholderArtistIds = new Set<number>();
     if (!groupCollaborationsByPrimary) {
@@ -149,11 +149,14 @@ export default function LibraryScreen() {
   const albums = useMemo(() => {
     const list = albumsRaw || [];
     if (!displayAlbumsWithoutArtwork) {
-      return list.filter((a: { has_artwork?: boolean | null }) => a.has_artwork === true);
+      return list.filter((a: { has_artwork?: boolean | null }) => a.has_artwork !== false);
     }
     return list;
   }, [albumsRaw, displayAlbumsWithoutArtwork]);
-  const albumGroups = useMemo(() => groupAlbums(albums), [albums]);
+  const albumGroups = useMemo(
+    () => (groupCollaborationsByPrimary ? groupAlbumsWithCollab(albums) : groupAlbums(albums)),
+    [albums, groupCollaborationsByPrimary]
+  );
   const { data: tracks } = useQuery({
     queryKey: ['tracks', sortBy.songs, order],
     queryFn: () => api.getTracks({ limit: 1000, sort_by: sortBy.songs, order }),
@@ -229,10 +232,10 @@ export default function LibraryScreen() {
     </Menu>
   );
 
-  const renderArtistCard = (g: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }, index: number) => (
+  const renderArtistCard = (g: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }) => (
     <TouchableOpacity
       key={g.primaryId}
-      style={[styles.card, { width: cardWidth, marginLeft: index % cardsPerRow === 0 ? 0 : CARD_GAP }]}
+      style={[styles.card, { width: cardWidth }]}
       onPress={() =>
         navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName, isAssortedArtists: g.isAssortedArtists })
       }
@@ -240,7 +243,7 @@ export default function LibraryScreen() {
       accessibilityRole="button"
       accessibilityLabel={`View ${g.displayName}`}
     >
-      {usePlaceholderArtistIds.has(g.primaryId) ? (
+      {(usePlaceholderArtistIds.has(g.primaryId) || (g as { usePlaceholderArtwork?: boolean }).usePlaceholderArtwork) ? (
         <ArtworkPlaceholder size={cardWidth} style={[styles.cardArtwork, { borderRadius: CARD_RADIUS }]} />
       ) : (
         <ArtworkImage type="artist" id={g.primaryId} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
@@ -252,18 +255,21 @@ export default function LibraryScreen() {
   );
 
   const renderAlbumCard = (
-    g: { displayTitle: string; albumIds: number[]; primaryAlbum: { id: number }; artistNames: string },
-    index: number
+    g: { displayTitle: string; albumIds: number[]; primaryAlbum: { id: number }; artistNames: string; usePlaceholderArtwork?: boolean }
   ) => (
     <TouchableOpacity
       key={g.albumIds.join('-')}
-      style={[styles.card, { width: cardWidth, marginLeft: index % cardsPerRow === 0 ? 0 : CARD_GAP }]}
+      style={[styles.card, { width: cardWidth }]}
       onPress={() => handleAlbumPress(g)}
       activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`View album ${g.displayTitle}`}
     >
-      <ArtworkImage type="album" id={g.primaryAlbum.id} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
+      {g.usePlaceholderArtwork ? (
+        <ArtworkPlaceholder size={cardWidth} style={[styles.cardArtwork, { borderRadius: CARD_RADIUS }]} />
+      ) : (
+        <ArtworkImage type="album" id={g.primaryAlbum.id} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
+      )}
       <Text variant="bodyMedium" numberOfLines={2} style={styles.cardTitle}>
         {g.displayTitle}
       </Text>
@@ -367,18 +373,35 @@ export default function LibraryScreen() {
               )}
             </>
           )}
-          {tab === 'albums' && isSettingVisible('display_albums_without_artwork') && (
-            <View style={styles.inlineToggle}>
-              <Text variant="labelSmall" style={styles.inlineToggleLabel}>
-                No art
-              </Text>
-              <Switch
-                value={displayAlbumsWithoutArtwork}
-                onValueChange={setDisplayAlbumsWithoutArtwork}
-                color="#4a9eff"
-                style={styles.inlineSwitch}
-              />
-            </View>
+          {tab === 'albums' && (
+            <>
+              {isSettingVisible('display_albums_without_artwork') && (
+                <View style={styles.inlineToggle}>
+                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
+                    No art
+                  </Text>
+                  <Switch
+                    value={displayAlbumsWithoutArtwork}
+                    onValueChange={setDisplayAlbumsWithoutArtwork}
+                    color="#4a9eff"
+                    style={styles.inlineSwitch}
+                  />
+                </View>
+              )}
+              {isSettingVisible('group_collaborations_by_primary') && (
+                <View style={styles.inlineToggle}>
+                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
+                    Group collab
+                  </Text>
+                  <Switch
+                    value={groupCollaborationsByPrimary}
+                    onValueChange={setGroupCollaborationsByPrimary}
+                    color="#4a9eff"
+                    style={styles.inlineSwitch}
+                  />
+                </View>
+              )}
+            </>
           )}
           {renderSortMenu()}
         </View>
@@ -387,7 +410,7 @@ export default function LibraryScreen() {
       <ScrollView style={styles.scrollContent}>
       {tab === 'artists' && (
         <View style={styles.grid}>
-          {groupedArtists.map((g, i) => renderArtistCard(g, i))}
+          {groupedArtists.map((g) => renderArtistCard(g))}
         </View>
       )}
 
@@ -396,7 +419,7 @@ export default function LibraryScreen() {
           ? albumsGroupedByDecade.map((g) => renderAlbumSection(g.decade, g.items, renderAlbumCard))
           : (
             <View style={styles.grid}>
-              {albumGroups.map((g, i) => renderAlbumCard(g, i))}
+              {albumGroups.map((g) => renderAlbumCard(g))}
             </View>
           ))}
 
@@ -455,6 +478,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     padding: HORIZONTAL_PADDING,
     paddingTop: 8,
+    gap: CARD_GAP,
   },
   card: {
     marginBottom: CARD_GAP,
