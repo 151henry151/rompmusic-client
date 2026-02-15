@@ -4,20 +4,29 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
-import { SegmentedButtons, List } from 'react-native-paper';
+import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { SegmentedButtons, List, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { usePlayerStore } from '../store/playerStore';
+import ArtworkImage from '../components/ArtworkImage';
 
-type RootStackParamList = { ArtistDetail: { artistId: number; artistName: string } };
+type RootStackParamList = {
+  ArtistDetail: { artistId: number; artistName: string };
+  AlbumDetail: { albumId: number; highlightTrackId?: number };
+};
+
+const CARD_GAP = 12;
+const HORIZONTAL_PADDING = 16;
+const CARD_RADIUS = 10;
 
 export default function LibraryScreen() {
   const [tab, setTab] = useState<'artists' | 'albums'>('artists');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
-  const playTrack = usePlayerStore((s) => s.playTrack);
+  const { width } = useWindowDimensions();
+  const cardsPerRow = 2;
+  const cardWidth = (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow;
 
   const { data: artists } = useQuery({
     queryKey: ['artists'],
@@ -28,11 +37,8 @@ export default function LibraryScreen() {
     queryFn: () => api.getAlbums({ limit: 100 }),
   });
 
-  const handlePlayAlbum = async (albumId: number) => {
-    const tracks = await api.getTracks({ album_id: albumId });
-    if (tracks.length > 0) {
-      await playTrack(tracks[0], tracks);
-    }
+  const handleAlbumPress = (albumId: number) => {
+    navigation.navigate('AlbumDetail', { albumId });
   };
 
   return (
@@ -51,6 +57,7 @@ export default function LibraryScreen() {
           <List.Item
             key={a.id}
             title={a.name}
+            left={() => <ArtworkImage type="artist" id={a.id} size={48} style={styles.artwork} />}
             onPress={() => navigation.navigate('ArtistDetail', { artistId: a.id, artistName: a.name })}
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
             style={styles.item}
@@ -58,21 +65,34 @@ export default function LibraryScreen() {
             accessibilityLabel={`View ${a.name}`}
           />
         ))}
-      {tab === 'albums' &&
-        (albums || []).map(
-          (a: { id: number; title: string; artist_name?: string }) => (
-            <List.Item
+      {tab === 'albums' && (
+        <View style={styles.albumGrid}>
+          {(albums || []).map((a: { id: number; title: string; artist_name?: string }, index: number) => (
+            <TouchableOpacity
               key={a.id}
-              title={a.title}
-              description={a.artist_name}
-              onPress={() => handlePlayAlbum(a.id)}
-              style={styles.item}
-              right={(props) => <List.Icon {...props} icon="play" />}
+              style={[styles.albumCard, { width: cardWidth, marginLeft: index % cardsPerRow === 0 ? 0 : CARD_GAP }]}
+              onPress={() => handleAlbumPress(a.id)}
+              activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`Play album ${a.title}`}
-            />
-          )
-        )}
+              accessibilityLabel={`View album ${a.title}`}
+            >
+              <ArtworkImage
+                type="album"
+                id={a.id}
+                size={cardWidth}
+                borderRadius={CARD_RADIUS}
+                style={styles.albumArtwork}
+              />
+              <Text variant="bodyMedium" numberOfLines={2} style={styles.albumTitle}>
+                {a.title}
+              </Text>
+              <Text variant="bodySmall" numberOfLines={1} style={styles.albumArtist}>
+                {a.artist_name || 'Unknown'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -87,5 +107,30 @@ const styles = StyleSheet.create({
   },
   item: {
     backgroundColor: '#1a1a1a',
+  },
+  artwork: {
+    marginRight: 8,
+    alignSelf: 'center',
+  },
+  albumGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: HORIZONTAL_PADDING,
+    paddingTop: 8,
+  },
+  albumCard: {
+    marginBottom: CARD_GAP,
+  },
+  albumArtwork: {
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  albumTitle: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  albumArtist: {
+    color: '#888',
+    marginTop: 2,
   },
 });

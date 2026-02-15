@@ -67,6 +67,14 @@ export default function LoginScreen() {
         </Button>
         <Button
           mode="text"
+          onPress={() => navigation.navigate('ForgotPassword')}
+          disabled={isLoading}
+          style={styles.forgotButton}
+        >
+          Forgot password
+        </Button>
+        <Button
+          mode="text"
           onPress={() => navigation.navigate('Register')}
           disabled={isLoading}
           style={styles.registerButton}
@@ -78,14 +86,19 @@ export default function LoginScreen() {
   );
 }
 
+const FORM_MAX_WIDTH = 380;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
     backgroundColor: '#0a0a0a',
   },
   box: {
+    width: '100%',
+    maxWidth: FORM_MAX_WIDTH,
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
     padding: 24,
@@ -105,6 +118,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#222',
   },
   button: {
+    marginTop: 8,
+  },
+  forgotButton: {
     marginTop: 8,
   },
   registerButton: {

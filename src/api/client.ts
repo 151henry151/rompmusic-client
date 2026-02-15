@@ -51,6 +51,27 @@ export const api = {
     });
   },
 
+  async verifyEmail(email: string, code: string) {
+    return fetchApi('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+  },
+
+  async forgotPassword(email: string) {
+    return fetchApi('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async resetPassword(email: string, code: string, newPassword: string) {
+    return fetchApi('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
+  },
+
   async getMe() {
     return fetchApi('/auth/me');
   },
@@ -84,6 +105,30 @@ export const api = {
   async getTracks(params?: { skip?: number; limit?: number; album_id?: number; artist_id?: number; search?: string }) {
     const q = new URLSearchParams(params as Record<string, string>).toString();
     return fetchApi(`/library/tracks${q ? '?' + q : ''}`);
+  },
+
+  async getRecentlyAdded(limit = 20) {
+    return fetchApi(`/library/tracks/recently-added?limit=${limit}`);
+  },
+
+  async getRecentlyPlayed(limit = 20) {
+    return fetchApi(`/library/tracks/recently-played?limit=${limit}`);
+  },
+
+  async getMostPlayed(limit = 20) {
+    return fetchApi(`/library/tracks/most-played?limit=${limit}`);
+  },
+
+  async getFrequentlyPlayed(limit = 20) {
+    return fetchApi(`/library/tracks/frequently-played?limit=${limit}`);
+  },
+
+  async getSimilarTracks(trackId: number, limit = 20) {
+    return fetchApi(`/library/tracks/similar?track_id=${trackId}&limit=${limit}`);
+  },
+
+  async getRecommendedTracks(limit = 20) {
+    return fetchApi(`/library/tracks/recommended?limit=${limit}`);
   },
 
   async getTrack(id: number) {

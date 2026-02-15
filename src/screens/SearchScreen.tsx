@@ -4,14 +4,24 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { TextInput, List, Text } from 'react-native-paper';
+import { ScrollView, StyleSheet, View, TouchableOpacity } from 'react-native';
+import { TextInput, List, Text, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
+import ArtworkImage from '../components/ArtworkImage';
+
+type RootStackParamList = {
+  ArtistDetail: { artistId: number; artistName: string };
+  AlbumDetail: { albumId: number; highlightTrackId?: number };
+  TrackDetail: { trackId: number };
+};
 
 export default function SearchScreen() {
   const [q, setQ] = useState('');
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
   const playTrack = usePlayerStore((s) => s.playTrack);
 
   const { data, isLoading } = useQuery({
@@ -20,9 +30,13 @@ export default function SearchScreen() {
     enabled: q.length >= 2,
   });
 
-  const handlePlay = async (trackId: number) => {
+  const handlePlayTrack = async (trackId: number) => {
     const track = (data?.tracks || []).find((t: { id: number }) => t.id === trackId);
     if (track) await playTrack(track, data?.tracks || []);
+  };
+
+  const handleTrackPress = (trackId: number) => {
+    navigation.navigate('TrackDetail', { trackId });
   };
 
   return (
@@ -43,22 +57,76 @@ export default function SearchScreen() {
         <Text style={styles.hint}>Type at least 2 characters to search</Text>
       )}
       {isLoading && <Text style={styles.muted}>Searching...</Text>}
+
+      {/* Artists */}
+      {data?.artists?.length > 0 && (
+        <>
+          <Text variant="titleSmall" style={styles.section}>
+            Artists
+          </Text>
+          {(data.artists || []).map((a: { id: number; name: string }) => (
+            <List.Item
+              key={`artist-${a.id}`}
+              title={a.name}
+              left={() => <ArtworkImage type="artist" id={a.id} size={48} style={styles.artwork} />}
+              onPress={() => navigation.navigate('ArtistDetail', { artistId: a.id, artistName: a.name })}
+              right={(props) => <List.Icon {...props} icon="chevron-right" />}
+              style={styles.item}
+              accessibilityRole="button"
+              accessibilityLabel={`View artist ${a.name}`}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Albums */}
+      {data?.albums?.length > 0 && (
+        <>
+          <Text variant="titleSmall" style={styles.section}>
+            Albums
+          </Text>
+          {(data.albums || []).map((a: { id: number; title: string; artist_name?: string }) => (
+            <List.Item
+              key={`album-${a.id}`}
+              title={a.title}
+              description={a.artist_name}
+              left={() => <ArtworkImage type="album" id={a.id} size={48} style={styles.artwork} />}
+              onPress={() => navigation.navigate('AlbumDetail', { albumId: a.id })}
+              right={(props) => <List.Icon {...props} icon="chevron-right" />}
+              style={styles.item}
+              accessibilityRole="button"
+              accessibilityLabel={`View album ${a.title}`}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Tracks */}
       {data?.tracks?.length > 0 && (
         <>
           <Text variant="titleSmall" style={styles.section}>
             Tracks
           </Text>
-          {(data.tracks || []).map((t: { id: number; title: string; artist_name?: string }) => (
-            <List.Item
-              key={t.id}
-              title={t.title}
-              description={t.artist_name}
-              onPress={() => handlePlay(t.id)}
-              style={styles.item}
-              right={(props) => <List.Icon {...props} icon="play" />}
-              accessibilityRole="button"
-              accessibilityLabel={`Play ${t.title} by ${t.artist_name || 'Unknown'}`}
-            />
+          {(data.tracks || []).map((t: { id: number; title: string; artist_name?: string; album_id: number }) => (
+            <View key={`track-${t.id}`} style={styles.trackRow}>
+              <TouchableOpacity
+                style={styles.trackRowMain}
+                onPress={() => handleTrackPress(t.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`View details for ${t.title} by ${t.artist_name || 'Unknown'}`}
+              >
+                <ArtworkImage type="album" id={t.album_id} size={48} style={styles.artwork} />
+                <View style={styles.trackRowText}>
+                  <Text variant="bodyLarge" style={styles.trackTitle}>{t.title}</Text>
+                  <Text variant="bodySmall" style={styles.trackDesc}>{t.artist_name || 'Unknown'}</Text>
+                </View>
+              </TouchableOpacity>
+              <IconButton
+                icon="play"
+                onPress={() => handlePlayTrack(t.id)}
+                accessibilityLabel={`Play ${t.title}`}
+              />
+            </View>
           ))}
         </>
       )}
@@ -72,6 +140,22 @@ const styles = StyleSheet.create({
   search: { backgroundColor: '#1a1a1a' },
   hint: { padding: 16, color: '#666' },
   muted: { padding: 16, color: '#888' },
-  section: { padding: 16, color: '#fff' },
+  section: { padding: 16, color: '#fff', paddingBottom: 8 },
   item: { backgroundColor: '#1a1a1a' },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 8,
+  },
+  trackRowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 16,
+  },
+  trackRowText: { flex: 1, marginLeft: 12 },
+  trackTitle: { color: '#fff' },
+  trackDesc: { color: '#888' },
+  artwork: { marginRight: 0 },
 });

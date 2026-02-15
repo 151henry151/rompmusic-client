@@ -11,9 +11,13 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
+import ArtworkImage from '../components/ArtworkImage';
 
 type ArtistDetailParams = { artistId: number; artistName: string };
-type RootStackParamList = { ArtistDetail: ArtistDetailParams };
+type RootStackParamList = {
+  ArtistDetail: ArtistDetailParams;
+  AlbumDetail: { albumId: number; highlightTrackId?: number };
+};
 
 export default function ArtistDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
@@ -30,6 +34,10 @@ export default function ArtistDetailScreen() {
   });
   const playTrack = usePlayerStore((s) => s.playTrack);
 
+  const handleAlbumPress = (albumId: number) => {
+    navigation.navigate('AlbumDetail', { albumId });
+  };
+
   const handlePlayAlbum = async (albumId: number) => {
     const tracks = await api.getTracks({ album_id: albumId });
     if (tracks.length > 0) {
@@ -39,19 +47,24 @@ export default function ArtistDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      <ArtworkImage type="artist" id={artistId} size={160} style={styles.artistArtwork} />
       <Text variant="headlineSmall" style={styles.header}>
         {artist?.name ?? artistName}
       </Text>
       <Text variant="titleSmall" style={styles.section}>
         Albums
       </Text>
-      {(albums || []).map((a: { id: number; title: string }) => (
+      {(albums || []).map((a: { id: number; title: string; year?: number }) => (
         <List.Item
           key={a.id}
           title={a.title}
-          onPress={() => handlePlayAlbum(a.id)}
-          right={(props) => <List.Icon {...props} icon="play" />}
+          description={a.year ? String(a.year) : undefined}
+          left={() => <ArtworkImage type="album" id={a.id} size={56} style={styles.albumArtwork} />}
+          onPress={() => handleAlbumPress(a.id)}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
           style={styles.item}
+          accessibilityRole="button"
+          accessibilityLabel={`View album ${a.title}`}
         />
       ))}
     </ScrollView>
@@ -60,7 +73,12 @@ export default function ArtistDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  header: { padding: 16, color: '#fff' },
-  section: { paddingHorizontal: 16, paddingTop: 8, color: '#888' },
+  artistArtwork: {
+    alignSelf: 'center',
+    marginVertical: 24,
+  },
+  header: { paddingHorizontal: 16, color: '#fff' },
+  section: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, color: '#888' },
   item: { backgroundColor: '#1a1a1a' },
+  albumArtwork: { marginRight: 12, alignSelf: 'center' },
 });

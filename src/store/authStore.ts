@@ -21,10 +21,15 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   isReady: boolean;
+  pendingVerifyEmail: string | null;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
+  clearPendingVerify: () => void;
 }
 
 const TOKEN_KEY = 'rompmusic_token';
@@ -52,6 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   isLoading: false,
   isReady: false,
+  pendingVerifyEmail: null,
 
   login: async (username, password) => {
     set({ isLoading: true });
@@ -71,16 +77,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       await api.register(username, email, password);
-      const token = await api.login(username, password);
-      setToken(token);
-      await setStoredToken(token);
-      const user = await api.getMe();
-      set({ user, token, isLoading: false });
+      set({ pendingVerifyEmail: email, isLoading: false });
     } catch (e) {
       set({ isLoading: false });
       throw e;
     }
   },
+
+  verifyEmail: async (email, code) => {
+    set({ isLoading: true });
+    try {
+      await api.verifyEmail(email, code);
+      set({ pendingVerifyEmail: null, isLoading: false });
+    } catch (e) {
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  forgotPassword: async (email) => {
+    set({ isLoading: true });
+    try {
+      await api.forgotPassword(email);
+      set({ isLoading: false });
+    } catch (e) {
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  resetPassword: async (email, code, newPassword) => {
+    set({ isLoading: true });
+    try {
+      await api.resetPassword(email, code, newPassword);
+      set({ isLoading: false });
+    } catch (e) {
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  clearPendingVerify: () => set({ pendingVerifyEmail: null }),
 
   logout: async () => {
     setToken(null);

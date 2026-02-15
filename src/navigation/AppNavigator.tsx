@@ -13,14 +13,20 @@ import { Icon } from 'react-native-paper';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import VerifyEmailScreen from '../screens/VerifyEmailScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SearchScreen from '../screens/SearchScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
 import ArtistDetailScreen from '../screens/ArtistDetailScreen';
+import AlbumDetailScreen from '../screens/AlbumDetailScreen';
+import TrackDetailScreen from '../screens/TrackDetailScreen';
 import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
+import { usePlayerStore, type Track } from '../store/playerStore';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -33,16 +39,8 @@ const styles = StyleSheet.create({
 });
 
 function MainTabs() {
-  const insets = useSafeAreaInsets();
-  const [showPlayer, setShowPlayer] = React.useState(false);
-
   return (
-    <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
-      {showPlayer && (
-        <View style={StyleSheet.absoluteFill}>
-          <PlayerScreen onClose={() => setShowPlayer(false)} />
-        </View>
-      )}
+    <View style={styles.wrapper}>
       <Tab.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: '#0a0a0a' },
@@ -73,6 +71,48 @@ function MainTabs() {
           options={{ tabBarIcon: ({ color, size }) => <Icon source="cog" color={color} size={size} /> }}
         />
       </Tab.Navigator>
+    </View>
+  );
+}
+
+function AuthenticatedLayout() {
+  const insets = useSafeAreaInsets();
+  const [showPlayer, setShowPlayer] = React.useState(false);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const prevTrackRef = React.useRef<Track | null>(null);
+
+  React.useEffect(() => {
+    if (currentTrack && !prevTrackRef.current) {
+      setShowPlayer(true);
+    }
+    prevTrackRef.current = currentTrack;
+  }, [currentTrack]);
+
+  return (
+    <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="ArtistDetail"
+          component={ArtistDetailScreen}
+          options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="AlbumDetail"
+          component={AlbumDetailScreen}
+          options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="TrackDetail"
+          component={TrackDetailScreen}
+          options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+      </Stack.Navigator>
+      {showPlayer && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          <PlayerScreen onClose={() => setShowPlayer(false)} />
+        </View>
+      )}
       <MiniPlayer onExpand={() => setShowPlayer(true)} />
     </View>
   );
@@ -102,16 +142,12 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           </>
         ) : (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen
-              name="ArtistDetail"
-              component={ArtistDetailScreen}
-              options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
-            />
-          </>
+          <Stack.Screen name="App" component={AuthenticatedLayout} />
         )}
       </Stack.Navigator>
     </NavigationContainer>

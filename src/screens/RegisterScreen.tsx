@@ -31,6 +31,7 @@ export default function RegisterScreen() {
     }
     try {
       await register(username.trim(), email.trim(), password);
+      navigation.navigate('VerifyEmail' as never, { email: email.trim() } as never);
     } catch (e) {
       Alert.alert('Registration failed', e instanceof Error ? e.message : 'Could not create account');
     }

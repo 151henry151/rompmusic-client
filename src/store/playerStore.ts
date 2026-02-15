@@ -29,9 +29,11 @@ interface PlayerState {
   isPlaying: boolean;
   position: number;
   duration: number;
+  volume: number;
   isLoading: boolean;
   error: string | null;
 
+  setVolume: (v: number) => Promise<void>;
   setQueue: (tracks: Track[], startIndex?: number) => void;
   play: () => Promise<void>;
   pause: () => Promise<void>;
@@ -40,7 +42,10 @@ interface PlayerState {
   skipToPrevious: () => Promise<void>;
   playTrack: (track: Track, queue?: Track[]) => Promise<void>;
   addToQueue: (tracks: Track | Track[]) => void;
+  playNext: (tracks: Track | Track[]) => void;
   clearQueue: () => void;
+  autoplayEnabled: boolean;
+  setAutoplay: (enabled: boolean) => void;
 }
 
 let sound: Audio.Sound | null = null;
@@ -57,7 +62,7 @@ async function loadAndPlay(
   if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
   const { sound: s } = await Audio.Sound.createAsync(
     { uri: url },
-    { shouldPlay: true, positionMillis: position * 1000 },
+    { shouldPlay: true, positionMillis: position * 1000, volume: currentVolume },
     (status) => {
       if (status.isLoaded) {
         if (status.didJustFinishAndNotLoop) onFinish();
@@ -85,6 +90,8 @@ async function preloadNext(track: Track): Promise<Audio.Sound | null> {
   }
 }
 
+let currentVolume = 1;
+
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
   currentIndex: 0,
@@ -92,8 +99,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   position: 0,
   duration: 0,
+  volume: 1,
   isLoading: false,
   error: null,
+  autoplayEnabled: false,
+
+  setVolume: async (v: number) => {
+    currentVolume = Math.max(0, Math.min(1, v));
+    set({ volume: currentVolume });
+    if (sound) {
+      try {
+        await sound.setVolumeAsync(currentVolume);
+      } catch {
+        /* best-effort */
+      }
+    }
+  },
 
   setQueue: (tracks, startIndex = 0) => {
     set({ queue: tracks, currentIndex: startIndex });
@@ -141,17 +162,43 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   skipToNext: async () => {
-    const { queue, currentIndex } = get();
+    let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
     if (currentIndex + 1 >= queue.length) {
-      await sound?.unloadAsync();
-      await nextSound?.unloadAsync();
-      sound = null;
-      nextSound = null;
-      set({ isPlaying: false, currentTrack: null });
-      return;
+      if (autoplayEnabled && currentTrack) {
+        try {
+          const similar = await api.getSimilarTracks(currentTrack.id, 15);
+          if (similar?.length) {
+            const mapped = similar.map((t: { id: number; title: string; album_id: number; artist_id: number; album_title?: string; artist_name?: string; track_number: number; disc_number: number; duration: number }) => ({
+              id: t.id,
+              title: t.title,
+              album_id: t.album_id,
+              artist_id: t.artist_id,
+              album_title: t.album_title,
+              artist_name: t.artist_name,
+              track_number: t.track_number,
+              disc_number: t.disc_number,
+              duration: t.duration,
+            }));
+            set((s) => ({ queue: [...s.queue, ...mapped] }));
+            queue = [...queue, ...mapped];
+          }
+        } catch {
+          /* ignore autoplay fetch errors */
+        }
+      }
+      const state = get();
+      if (state.currentIndex + 1 >= state.queue.length) {
+        await sound?.unloadAsync();
+        await nextSound?.unloadAsync();
+        sound = null;
+        nextSound = null;
+        set({ isPlaying: false, currentTrack: null });
+        return;
+      }
     }
-    const nextIndex = currentIndex + 1;
-    const nextTrack = queue[nextIndex];
+    const { queue: q, currentIndex: ci } = get();
+    const nextIndex = ci + 1;
+    const nextTrack = q[nextIndex];
     if (nextSound) {
       await sound?.unloadAsync();
       sound = nextSound;
@@ -164,8 +211,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       } catch {
         /* best-effort on web */
       }
+      try {
+        await sound.setVolumeAsync(currentVolume);
+      } catch {
+        /* best-effort */
+      }
       await sound.playAsync();
-      const nextNext = nextIndex + 1 < queue.length ? queue[nextIndex + 1] : null;
+      const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
       if (nextNext) nextSound = await preloadNext(nextNext);
     } else {
       await sound?.unloadAsync();
@@ -173,6 +225,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     set({ currentTrack: nextTrack, currentIndex: nextIndex, position: 0, duration: nextTrack.duration });
   },
+
 
   skipToPrevious: async () => {
     const { position, queue, currentIndex } = get();
@@ -203,7 +256,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set((s) => ({ queue: [...s.queue, ...arr] }));
   },
 
+  playNext: (tracks) => {
+    const arr = Array.isArray(tracks) ? tracks : [tracks];
+    set((s) => {
+      const { queue, currentIndex } = s;
+      const insertAt = currentIndex + 1;
+      const next = [...queue];
+      next.splice(insertAt, 0, ...arr);
+      return { queue: next };
+    });
+  },
+
   clearQueue: () => {
     set({ queue: [], currentIndex: 0, currentTrack: null });
+  },
+
+  setAutoplay: (enabled) => {
+    set({ autoplayEnabled: enabled });
   },
 }));

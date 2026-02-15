@@ -4,9 +4,11 @@
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, IconButton, Slider } from 'react-native-paper';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { Text, IconButton, Slider, List, Switch } from 'react-native-paper';
 import { usePlayerStore } from '../store/playerStore';
+import ArtworkImage from '../components/ArtworkImage';
+import type { Track } from '../store/playerStore';
 
 interface Props {
   onClose: () => void;
@@ -19,20 +21,49 @@ function formatTime(seconds: number): string {
 }
 
 export default function PlayerScreen({ onClose }: Props) {
-  const { currentTrack, isPlaying, position, duration, isLoading, error, play, pause, seekTo, skipToNext, skipToPrevious } =
-    usePlayerStore();
+  const {
+    currentTrack,
+    queue,
+    currentIndex,
+    isPlaying,
+    position,
+    duration,
+    volume,
+    isLoading,
+    error,
+    play,
+    pause,
+    seekTo,
+    skipToNext,
+    skipToPrevious,
+    setVolume,
+    playTrack,
+    autoplayEnabled,
+    setAutoplay,
+  } = usePlayerStore();
 
-  if (!currentTrack) {
-    onClose();
-    return null;
-  }
+  React.useEffect(() => {
+    if (!currentTrack) onClose();
+  }, [currentTrack, onClose]);
+
+  if (!currentTrack) return null;
 
   const progress = duration > 0 ? position / duration : 0;
 
   return (
-    <View style={styles.container}>
-      <IconButton icon="close" onPress={onClose} style={styles.close} accessibilityLabel="Close player" />
-      <View style={styles.artwork} />
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <IconButton
+        icon="close"
+        onPress={onClose}
+        style={styles.close}
+        accessibilityLabel="Close player"
+      />
+      <ArtworkImage
+        type="album"
+        id={currentTrack.album_id}
+        size={280}
+        style={styles.artwork}
+      />
       <Text variant="headlineSmall" style={styles.title}>
         {currentTrack.title}
       </Text>
@@ -55,7 +86,13 @@ export default function PlayerScreen({ onClose }: Props) {
         <Text variant="bodySmall" style={styles.time}>{formatTime(duration)}</Text>
       </View>
       <View style={styles.controls}>
-        <IconButton icon="skip-previous" size={48} onPress={skipToPrevious} disabled={isLoading} accessibilityLabel="Previous track" />
+        <IconButton
+          icon="skip-previous"
+          size={48}
+          onPress={skipToPrevious}
+          disabled={isLoading}
+          accessibilityLabel="Previous track"
+        />
         <IconButton
           icon={isPlaying ? 'pause' : 'play'}
           size={64}
@@ -63,9 +100,43 @@ export default function PlayerScreen({ onClose }: Props) {
           disabled={isLoading}
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
         />
-        <IconButton icon="skip-next" size={48} onPress={skipToNext} disabled={isLoading} accessibilityLabel="Next track" />
+        <IconButton
+          icon="skip-next"
+          size={48}
+          onPress={skipToNext}
+          disabled={isLoading}
+          accessibilityLabel="Next track"
+        />
       </View>
-    </View>
+      <View style={styles.volumeRow}>
+        <Text variant="bodySmall" style={styles.volumeLabel}>Volume</Text>
+        <Slider
+          value={volume}
+          onValueChange={(v) => setVolume(v)}
+          style={styles.volumeSlider}
+          color="#4a9eff"
+        />
+      </View>
+      <View style={styles.autoplayRow}>
+        <Text variant="bodyMedium" style={styles.autoplayLabel}>Autoplay</Text>
+        <Switch value={autoplayEnabled} onValueChange={setAutoplay} color="#4a9eff" />
+      </View>
+      {queue.length > 0 && (
+        <View style={styles.upNextSection}>
+          <Text variant="titleSmall" style={styles.upNextTitle}>Up next</Text>
+          {queue.slice(currentIndex + 1, currentIndex + 8).map((t: Track, i: number) => (
+            <List.Item
+              key={`${t.id}-${currentIndex + i}`}
+              title={t.title}
+              description={t.artist_name || 'Unknown'}
+              left={() => <ArtworkImage type="album" id={t.album_id} size={40} style={styles.queueArtwork} />}
+              onPress={() => playTrack(t, queue)}
+              style={styles.queueItem}
+            />
+          ))}
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -73,20 +144,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  content: {
     padding: 24,
+    paddingTop: 48,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   close: {
     position: 'absolute',
-    top: 48,
+    top: 8,
     right: 8,
+    zIndex: 1,
   },
   artwork: {
-    width: 280,
-    height: 280,
-    borderRadius: 8,
-    backgroundColor: '#333',
-    alignSelf: 'center',
     marginBottom: 24,
   },
   title: {
@@ -101,12 +172,14 @@ const styles = StyleSheet.create({
   },
   slider: {
     marginVertical: 8,
+    width: '100%',
   },
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
     marginBottom: 8,
+    width: '100%',
   },
   time: {
     color: '#888',
@@ -121,5 +194,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
+  },
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    width: '100%',
+  },
+  volumeLabel: {
+    color: '#888',
+    width: 56,
+  },
+  volumeSlider: {
+    flex: 1,
+  },
+  autoplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    width: '100%',
+  },
+  autoplayLabel: {
+    color: '#fff',
+    marginRight: 12,
+  },
+  upNextSection: {
+    width: '100%',
+    marginTop: 24,
+  },
+  upNextTitle: {
+    color: '#888',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  queueItem: {
+    backgroundColor: '#1a1a1a',
+  },
+  queueArtwork: {
+    marginRight: 8,
   },
 });
