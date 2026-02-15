@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SegmentedButtons, Text, IconButton, Menu, Divider, List, Switch } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -93,6 +94,7 @@ export default function LibraryScreen() {
   const displayArtistsWithoutArtwork = useSettingsStore((s) => s.getEffectiveDisplayArtistsWithoutArtwork());
   const setDisplayArtistsWithoutArtwork = useSettingsStore((s) => s.setDisplayArtistsWithoutArtwork);
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
   const cardsPerRow = isMobile ? 3 : 5;
@@ -322,8 +324,8 @@ export default function LibraryScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }]}>
         <SegmentedButtons
           value={tab}
           onValueChange={(v) => setTab(v as TabType)}
@@ -382,6 +384,7 @@ export default function LibraryScreen() {
         </View>
       </View>
 
+      <ScrollView style={styles.scrollContent}>
       {tab === 'artists' && (
         <View style={styles.grid}>
           {groupedArtists.map((g, i) => renderArtistCard(g, i))}
@@ -405,7 +408,8 @@ export default function LibraryScreen() {
               {(tracks || []).map((t) => renderTrackListRow(t, tracks || []))}
             </View>
           ))}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -414,10 +418,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0a',
   },
-  header: {
+  stickyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: '#0a0a0a',
+  },
+  scrollContent: {
+    flex: 1,
   },
   segmented: {
     flex: 1,

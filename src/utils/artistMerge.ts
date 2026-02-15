@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Client-side artist merge: groups artists that differ only by capitalization
- * (e.g. "100 Gecs" and "100 gecs") for display. No server or file changes.
+ * (e.g. "John Coltrane" and "John coltrane") for display. No server or file changes.
  */
 
 export interface ArtistLike {
@@ -13,7 +13,7 @@ export interface ArtistLike {
 
 /**
  * Pick the "best" display name from variants that differ only by case.
- * Prefers Title Case (e.g. "100 Gecs") over all-lowercase ("100 gecs").
+ * Prefers Title Case (e.g. "John Coltrane") over all-lowercase ("John coltrane").
  */
 function pickCanonicalName(names: string[]): string {
   if (names.length === 0) return '';
@@ -21,7 +21,7 @@ function pickCanonicalName(names: string[]): string {
   // Prefer the one that has uppercase letters (intentional capitalization, e.g. "100 Gecs" over "100 gecs")
   const withCaps = names.filter((n) => /[A-Z]/.test(n));
   if (withCaps.length > 0) {
-    // Prefer mixed case (Title Case) over ALL CAPS
+    // Prefer mixed case (Title Case) over ALL CAPS; e.g. "John Coltrane" over "John coltrane"
     const mixedCase = withCaps.filter((n) => /[a-z]/.test(n) && /[A-Z]/.test(n));
     return (mixedCase.length > 0 ? mixedCase : withCaps)[0];
   }

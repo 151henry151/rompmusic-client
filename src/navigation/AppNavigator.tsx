@@ -64,7 +64,7 @@ function MainTabs() {
         <Tab.Screen
           name="Library"
           component={LibraryScreen}
-          options={{ tabBarIcon: ({ color, size }) => <Icon source="music-box-multiple" color={color} size={size} /> }}
+          options={{ headerShown: false, tabBarIcon: ({ color, size }) => <Icon source="music-box-multiple" color={color} size={size} /> }}
         />
         <Tab.Screen
           name="Settings"

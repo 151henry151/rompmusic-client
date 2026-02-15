@@ -15,7 +15,7 @@ export interface ClientConfigPolicy {
 }
 
 export interface SettingsState {
-  /** Group artists that differ only by capitalization (e.g. "100 Gecs" and "100 gecs"). Default: true */
+  /** Group artists that differ only by capitalization (e.g. "John Coltrane" and "John coltrane"). Default: true */
   groupArtistsByCapitalization: boolean;
   /** When false (default), hide albums without artwork on Library and Home. Search always shows all. */
   displayAlbumsWithoutArtwork: boolean;

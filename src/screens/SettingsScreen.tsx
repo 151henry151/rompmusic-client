@@ -42,7 +42,7 @@ export default function SettingsScreen() {
       {isSettingVisible('group_artists_by_capitalization') && (
         <List.Item
           title="Group artists with different capitalization"
-          description="Merge artists that differ only by case (e.g. 100 Gecs and 100 gecs) into one entry. Default: on."
+          description="Merge artists that differ only by case (e.g. John Coltrane and John coltrane) into one entry. Default: on."
           left={() => <List.Icon icon="format-letter-case" />}
           right={() => (
             <Switch
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
       {isSettingVisible('group_collaborations_by_primary') && (
         <List.Item
           title="Group collaborations by primary artist"
-          description="When on, multi-artist entries (e.g. The Movement, Elliot Martin) are grouped under the primary artist (The Movement)."
+          description="When on, entries like Miles Davis Quintet or Charlie Parker Sextet are grouped under the primary artist (Miles Davis, Charlie Parker)."
           left={() => <List.Icon icon="account-group" />}
           right={() => (
             <Switch
