@@ -5,7 +5,8 @@
 
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, IconButton, Slider, List, Switch } from 'react-native-paper';
+import Slider from '@react-native-community/slider';
+import { Text, IconButton, List, Switch } from 'react-native-paper';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
@@ -77,9 +78,13 @@ export default function PlayerScreen({ onClose }: Props) {
       )}
       <Slider
         value={progress}
+        minimumValue={0}
+        maximumValue={1}
         onSlidingComplete={(v) => seekTo(v * duration)}
         style={styles.slider}
-        color="#4a9eff"
+        minimumTrackTintColor="#4a9eff"
+        maximumTrackTintColor="#333"
+        thumbTintColor="#4a9eff"
       />
       <View style={styles.timeRow}>
         <Text variant="bodySmall" style={styles.time}>{formatTime(position)}</Text>
@@ -112,9 +117,13 @@ export default function PlayerScreen({ onClose }: Props) {
         <Text variant="bodySmall" style={styles.volumeLabel}>Volume</Text>
         <Slider
           value={volume}
+          minimumValue={0}
+          maximumValue={1}
           onValueChange={(v) => setVolume(v)}
           style={styles.volumeSlider}
-          color="#4a9eff"
+          minimumTrackTintColor="#4a9eff"
+          maximumTrackTintColor="#333"
+          thumbTintColor="#4a9eff"
         />
       </View>
       <View style={styles.autoplayRow}>

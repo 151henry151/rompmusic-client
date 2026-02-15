@@ -5,7 +5,8 @@
 
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, IconButton, Slider } from 'react-native-paper';
+import Slider from '@react-native-community/slider';
+import { Text, IconButton } from 'react-native-paper';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from './ArtworkImage';
 
@@ -49,9 +50,13 @@ export default function MiniPlayer({ onExpand }: Props) {
           </View>
           <Slider
             value={progress}
+            minimumValue={0}
+            maximumValue={1}
             onSlidingComplete={(v) => seekTo(v * duration)}
             style={styles.slider}
-            color="#4a9eff"
+            minimumTrackTintColor="#4a9eff"
+            maximumTrackTintColor="#333"
+            thumbTintColor="#4a9eff"
           />
         </View>
         <IconButton
