@@ -1,0 +1,189 @@
+/**
+ * Copyright (C) 2024 RompMusic Contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Gapless playback: preloads next track and transitions seamlessly.
+ */
+
+import { create } from 'zustand';
+import { Audio } from 'expo-av';
+import { api } from '../api/client';
+import { getToken } from '../api/client';
+
+export interface Track {
+  id: number;
+  title: string;
+  album_id: number;
+  artist_id: number;
+  album_title?: string;
+  artist_name?: string;
+  track_number: number;
+  disc_number: number;
+  duration: number;
+}
+
+interface PlayerState {
+  queue: Track[];
+  currentIndex: number;
+  currentTrack: Track | null;
+  isPlaying: boolean;
+  position: number;
+  duration: number;
+  isLoading: boolean;
+  error: string | null;
+
+  setQueue: (tracks: Track[], startIndex?: number) => void;
+  play: () => Promise<void>;
+  pause: () => Promise<void>;
+  seekTo: (seconds: number) => Promise<void>;
+  skipToNext: () => Promise<void>;
+  skipToPrevious: () => Promise<void>;
+  playTrack: (track: Track, queue?: Track[]) => Promise<void>;
+  addToQueue: (tracks: Track | Track[]) => void;
+  clearQueue: () => void;
+}
+
+let sound: Audio.Sound | null = null;
+let nextSound: Audio.Sound | null = null;
+
+async function loadAndPlay(
+  track: Track,
+  onFinish: () => void,
+  position = 0
+): Promise<Audio.Sound> {
+  let url = api.getStreamUrl(track.id);
+  const t = getToken();
+  if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
+  const { sound: s } = await Audio.Sound.createAsync(
+    { uri: url },
+    { shouldPlay: true, positionMillis: position * 1000 },
+    (status) => {
+      if (status.isLoaded && status.didJustFinishAndNotLoop) {
+        onFinish();
+      }
+    }
+  );
+  return s;
+}
+
+async function preloadNext(track: Track): Promise<Audio.Sound | null> {
+  try {
+    let url = api.getStreamUrl(track.id);
+    const t = getToken();
+    if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
+    const { sound: s } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: false });
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+export const usePlayerStore = create<PlayerState>((set, get) => ({
+  queue: [],
+  currentIndex: 0,
+  currentTrack: null,
+  isPlaying: false,
+  position: 0,
+  duration: 0,
+  isLoading: false,
+  error: null,
+
+  setQueue: (tracks, startIndex = 0) => {
+    set({ queue: tracks, currentIndex: startIndex });
+  },
+
+  play: async () => {
+    const { currentTrack, queue, currentIndex } = get();
+    if (!currentTrack) return;
+    set({ isPlaying: true, isLoading: true, error: null });
+    try {
+      if (sound) {
+        await sound.playAsync();
+      } else {
+        const nextIndex = currentIndex + 1;
+        const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
+        sound = await loadAndPlay(currentTrack, () => get().skipToNext(), get().position);
+        if (nextTrack) nextSound = await preloadNext(nextTrack);
+      }
+      set({ isPlaying: true, isLoading: false });
+    } catch (e) {
+      set({
+        isLoading: false,
+        error: e instanceof Error ? e.message : 'Playback failed',
+      });
+    }
+  },
+
+  pause: async () => {
+    if (sound) {
+      const status = await sound.getStatusAsync();
+      if (status.isLoaded && 'positionMillis' in status) {
+        set({ position: status.positionMillis / 1000 });
+      }
+      await sound.pauseAsync();
+    }
+    set({ isPlaying: false });
+  },
+
+  seekTo: async (seconds: number) => {
+    if (sound) {
+      await sound.setPositionAsync(seconds * 1000);
+      set({ position: seconds });
+    }
+  },
+
+  skipToNext: async () => {
+    const { queue, currentIndex } = get();
+    if (currentIndex + 1 >= queue.length) {
+      await sound?.unloadAsync();
+      sound = null;
+      set({ isPlaying: false, currentTrack: null });
+      return;
+    }
+    const nextIndex = currentIndex + 1;
+    const nextTrack = queue[nextIndex];
+    if (nextSound) {
+      await sound?.unloadAsync();
+      sound = nextSound;
+      nextSound = null;
+      await sound.playAsync();
+      const nextNext = nextIndex + 1 < queue.length ? queue[nextIndex + 1] : null;
+      if (nextNext) nextSound = await preloadNext(nextNext);
+    } else {
+      await sound?.unloadAsync();
+      sound = await loadAndPlay(nextTrack, () => get().skipToNext());
+    }
+    set({ currentTrack: nextTrack, currentIndex: nextIndex, position: 0, duration: nextTrack.duration });
+  },
+
+  skipToPrevious: async () => {
+    const { position, queue, currentIndex } = get();
+    if (position > 3 && sound) {
+      await sound.setPositionAsync(0);
+      set({ position: 0 });
+      return;
+    }
+    if (currentIndex <= 0) return;
+    const prevTrack = queue[currentIndex - 1];
+    await sound?.unloadAsync();
+    sound = await loadAndPlay(prevTrack, () => get().skipToNext());
+    set({ currentTrack: prevTrack, currentIndex: currentIndex - 1, position: 0, duration: prevTrack.duration });
+  },
+
+  playTrack: async (track, queue = []) => {
+    const tracks = queue.length ? queue : [track];
+    const idx = tracks.findIndex((t) => t.id === track.id);
+    const startIndex = idx >= 0 ? idx : 0;
+    set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration });
+    await get().play();
+  },
+
+  addToQueue: (tracks) => {
+    const arr = Array.isArray(tracks) ? tracks : [tracks];
+    set((s) => ({ queue: [...s.queue, ...arr] }));
+  },
+
+  clearQueue: () => {
+    set({ queue: [], currentIndex: 0, currentTrack: null });
+  },
+}));
