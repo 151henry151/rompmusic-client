@@ -95,11 +95,17 @@ export default function SearchScreen() {
           <Text variant="titleSmall" style={styles.section}>
             Albums
           </Text>
-          {(data.albums || []).map((a: { id: number; title: string; artist_name?: string }) => (
+          {(data.albums || []).map((a: { id: number; title: string; artist_id?: number; artist_name?: string }) => (
             <List.Item
               key={`album-${a.id}`}
               title={a.title}
-              description={a.artist_name}
+              description={
+                a.artist_name ? (
+                  <Text variant="bodySmall" style={styles.link} onPress={(e) => { e?.stopPropagation?.(); a.artist_id != null && navigation.navigate('ArtistDetail', { artistIds: [a.artist_id], artistName: a.artist_name }); }}>
+                    {a.artist_name}
+                  </Text>
+                ) : undefined
+              }
               left={() => <ArtworkImage type="album" id={a.id} size={48} style={styles.artwork} />}
               onPress={() => navigation.navigate('AlbumDetail', { albumId: a.id })}
               right={(props) => <List.Icon {...props} icon="chevron-right" />}
@@ -117,7 +123,7 @@ export default function SearchScreen() {
           <Text variant="titleSmall" style={styles.section}>
             Tracks
           </Text>
-          {(data.tracks || []).map((t: { id: number; title: string; artist_name?: string; album_id: number }) => (
+          {(data.tracks || []).map((t: { id: number; title: string; artist_id?: number; artist_name?: string; album_id: number; album_title?: string }) => (
             <View key={`track-${t.id}`} style={styles.trackRow}>
               <TouchableOpacity
                 style={styles.trackRowMain}
@@ -128,7 +134,19 @@ export default function SearchScreen() {
                 <ArtworkImage type="album" id={t.album_id} size={48} style={styles.artwork} />
                 <View style={styles.trackRowText}>
                   <Text variant="bodyLarge" style={styles.trackTitle}>{t.title}</Text>
-                  <Text variant="bodySmall" style={styles.trackDesc}>{t.artist_name || 'Unknown'}</Text>
+                  <View style={styles.trackDescRow}>
+                    <Text variant="bodySmall" style={styles.trackDescLink} onPress={(e) => { e?.stopPropagation?.(); t.artist_id != null && navigation.navigate('ArtistDetail', { artistIds: [t.artist_id], artistName: t.artist_name || 'Unknown' }); }}>
+                      {t.artist_name || 'Unknown'}
+                    </Text>
+                    {t.album_title != null && (
+                      <>
+                        <Text variant="bodySmall" style={styles.trackDescSep}> • </Text>
+                        <Text variant="bodySmall" style={styles.trackDescLink} onPress={(e) => { e?.stopPropagation?.(); navigation.navigate('AlbumDetail', { albumId: t.album_id }); }}>
+                          {t.album_title}
+                        </Text>
+                      </>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
               <IconButton
@@ -167,5 +185,9 @@ const styles = StyleSheet.create({
   trackRowText: { flex: 1, marginLeft: 12 },
   trackTitle: { color: '#fff' },
   trackDesc: { color: '#888' },
+  trackDescRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  trackDescLink: { color: '#4a9eff' },
+  trackDescSep: { color: '#666' },
+  link: { color: '#4a9eff' },
   artwork: { marginRight: 0 },
 });

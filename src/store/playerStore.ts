@@ -19,6 +19,11 @@ function getStreamFormat(): 'original' | 'ogg' {
   return useSettingsStore.getState().getEffectiveStreamFormat();
 }
 
+/** Start prestarting (play next at volume 0) this many seconds before end so it has time to load. Load time can be ~12s with transcoding or slow networks. */
+const PRESTART_BEFORE_END_SEC = 15;
+/** Consider track ended and promote next this many seconds before actual end (short overlap for gapless). */
+const PROMOTE_BEFORE_END_SEC = 0.02;
+
 export interface Track {
   id: number;
   title: string;
@@ -79,7 +84,8 @@ function loadAndPlay(
   position = 0
 ): AudioPlayer {
   const url = getStreamUrl(track);
-  const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: true });
+  // downloadFirst: false so the player gets the URL immediately and can stream (reduces long delay when starting playback; with downloadFirst: true we'd wait for full download/transcode before replace()).
+  const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: false });
   player.volume = currentVolume;
   if (position > 0) {
     player.seekTo(position);
@@ -89,12 +95,12 @@ function loadAndPlay(
     onPositionUpdate(status.currentTime);
     const dur = status.duration ?? 0;
     const pos = status.currentTime ?? 0;
-    if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - 0.4)) {
+    if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
       prestartedNext = true;
       nextSound.volume = 0;
       nextSound.play();
     }
-    const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - 0.02);
+    const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
     if (!finished && (status.didJustFinish || atEnd)) {
       finished = true;
       onFinish();
@@ -262,18 +268,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       prestartedNext = false;
       sound?.remove();
       sound = preloaded;
+      // If we prestarted 15s before end, the track may have been playing silently; ensure we're at the start when we unmute.
+      await sound.seekTo(0);
       sound.volume = currentVolume;
       let finished = false;
       sound.addListener('playbackStatusUpdate', (status) => {
         set({ position: status.currentTime });
         const dur = status.duration ?? 0;
         const pos = status.currentTime ?? 0;
-        if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - 0.4)) {
+        if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
           prestartedNext = true;
           nextSound.volume = 0;
           nextSound.play();
         }
-        const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - 0.02);
+        const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
         if (!finished && (status.didJustFinish || atEnd)) {
           finished = true;
           get().skipToNext();

@@ -7,9 +7,12 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, Icon, IconButton, List, Switch } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from './ArtworkImage';
 import type { Track } from '../store/playerStore';
+import type { AppStackParamList } from '../navigation/types';
 
 interface Props {
   onExpand: () => void;
@@ -22,6 +25,7 @@ function formatTime(seconds: number): string {
 }
 
 export default function MiniPlayer({ onExpand }: Props) {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Library'>>();
   const [queuePanelOpen, setQueuePanelOpen] = useState(false);
   const {
     currentTrack,
@@ -45,7 +49,7 @@ export default function MiniPlayer({ onExpand }: Props) {
 
   const progress = duration > 0 ? position / duration : 0;
   const manualEnd = autoplayStartIndex ?? queue.length;
-  const manualNext = queue.slice(currentIndex + 1, manualEnd);
+  const manualQueue = queue.slice(0, manualEnd);
   const autoplayNext = autoplayStartIndex != null ? queue.slice(manualEnd) : [];
 
   return (
@@ -54,22 +58,23 @@ export default function MiniPlayer({ onExpand }: Props) {
         <View style={styles.queuePanel}>
           <ScrollView style={styles.queueScroll} contentContainerStyle={styles.queueScrollContent}>
             <Text variant="labelMedium" style={styles.queueSectionTitle}>
-              Next up
+              Queue
             </Text>
-            {manualNext.length === 0 && autoplayNext.length === 0 && (
+            {manualQueue.length === 0 && autoplayNext.length === 0 && (
               <Text variant="bodySmall" style={styles.queueEmpty}>Nothing in the queue</Text>
             )}
-            {manualNext.map((t: Track, i: number) => (
+            {manualQueue.map((t: Track, i: number) => (
               <List.Item
-                key={`manual-${t.id}-${currentIndex + 1 + i}`}
+                key={`manual-${t.id}-${i}`}
                 title={t.title}
-                description={t.artist_name || 'Unknown'}
+                description={(t.artist_name || 'Unknown') + (t.album_title ? ` • ${t.album_title}` : '')}
                 left={() => <ArtworkImage type="album" id={t.album_id} size={40} style={styles.queueArtwork} />}
                 onPress={() => {
                   playTrack(t, queue);
                   setQueuePanelOpen(false);
                 }}
-                style={styles.queueItem}
+                style={[styles.queueItem, i === currentIndex && styles.queueItemCurrent]}
+                titleStyle={i === currentIndex ? styles.queueItemCurrentTitle : undefined}
               />
             ))}
             <View style={styles.autoplayRow}>
@@ -83,7 +88,7 @@ export default function MiniPlayer({ onExpand }: Props) {
                   <List.Item
                     key={`autoplay-${t.id}-${manualEnd + i}`}
                     title={t.title}
-                    description={t.artist_name || 'Unknown'}
+                    description={(t.artist_name || 'Unknown') + (t.album_title ? ` • ${t.album_title}` : '')}
                     left={() => <ArtworkImage type="album" id={t.album_id} size={40} style={styles.queueArtwork} />}
                     onPress={() => {
                       playTrack(t, queue);
@@ -122,9 +127,29 @@ export default function MiniPlayer({ onExpand }: Props) {
             <Text variant="bodyMedium" numberOfLines={1} style={styles.title}>
               {currentTrack.title}
             </Text>
-            <Text variant="bodySmall" numberOfLines={1} style={styles.artist}>
-              {currentTrack.artist_name || 'Unknown'}
-            </Text>
+            <View style={styles.artistAlbumRow}>
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={styles.artistLink}
+                onPress={(e) => { e?.stopPropagation?.(); navigation.navigate('ArtistDetail', { artistIds: [currentTrack.artist_id], artistName: currentTrack.artist_name || 'Unknown' }); }}
+              >
+                {currentTrack.artist_name || 'Unknown'}
+              </Text>
+              {currentTrack.album_title ? (
+                <>
+                  <Text variant="bodySmall" style={styles.artistAlbumSep}> • </Text>
+                  <Text
+                    variant="bodySmall"
+                    numberOfLines={1}
+                    style={styles.artistLink}
+                    onPress={(e) => { e?.stopPropagation?.(); navigation.navigate('AlbumDetail', { albumId: currentTrack.album_id }); }}
+                  >
+                    {currentTrack.album_title}
+                  </Text>
+                </>
+              ) : null}
+            </View>
             <View style={styles.timeRow}>
               <Text variant="bodySmall" style={styles.time}>{formatTime(position)}</Text>
               <Text variant="bodySmall" style={styles.time}>{formatTime(duration)}</Text>
@@ -199,6 +224,13 @@ const styles = StyleSheet.create({
   queueItem: {
     backgroundColor: 'transparent',
   },
+  queueItemCurrent: {
+    backgroundColor: 'rgba(74, 158, 255, 0.15)',
+  },
+  queueItemCurrentTitle: {
+    color: '#4a9eff',
+    fontWeight: '600',
+  },
   queueArtwork: {
     marginRight: 8,
   },
@@ -239,6 +271,17 @@ const styles = StyleSheet.create({
   },
   artist: {
     color: '#888',
+  },
+  artistAlbumRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  artistLink: {
+    color: '#4a9eff',
+  },
+  artistAlbumSep: {
+    color: '#666',
   },
   chevronRow: {
     width: '100%',

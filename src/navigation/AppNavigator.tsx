@@ -17,6 +17,7 @@ import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import HistoryScreen from '../screens/HistoryScreen';
 import PlayerScreen from '../screens/PlayerScreen';
 import ArtistDetailScreen from '../screens/ArtistDetailScreen';
 import AlbumDetailScreen from '../screens/AlbumDetailScreen';
@@ -66,6 +67,11 @@ function AuthenticatedLayout() {
         }}
       >
         <AppStack.Screen name="Library" component={LibraryScreen} />
+        <AppStack.Screen
+          name="History"
+          component={HistoryScreen}
+          options={{ headerShown: false }}
+        />
         <AppStack.Screen
           name="Settings"
           component={SettingsScreen}

@@ -14,7 +14,11 @@ import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 
 type TrackDetailParams = { trackId: number };
-type RootStackParamList = { TrackDetail: TrackDetailParams; AlbumDetail: { albumId: number; highlightTrackId?: number } };
+type RootStackParamList = {
+  TrackDetail: TrackDetailParams;
+  AlbumDetail: { albumId: number; albumIds?: number[]; highlightTrackId?: number };
+  ArtistDetail: { artistIds: number[]; artistName: string };
+};
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -52,16 +56,24 @@ export default function TrackDetailScreen() {
     navigation.navigate('AlbumDetail', { albumId: track.album_id, highlightTrackId: track.id });
   };
 
+  const handleArtistPress = () => {
+    navigation.navigate('ArtistDetail', { artistIds: [track.artist_id], artistName: track.artist_name || 'Unknown' });
+  };
+
+  const handleAlbumPress = () => {
+    navigation.navigate('AlbumDetail', { albumId: track.album_id, highlightTrackId: track.id });
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
       <Text variant="headlineSmall" style={styles.title}>
         {track.title}
       </Text>
-      <Text variant="bodyLarge" style={styles.artist}>
+      <Text variant="bodyLarge" style={styles.artist} onPress={handleArtistPress}>
         {track.artist_name || 'Unknown'}
       </Text>
-      <Text variant="bodyMedium" style={styles.album}>
+      <Text variant="bodyMedium" style={styles.album} onPress={handleAlbumPress}>
         {track.album_title || 'Unknown Album'}
       </Text>
       <Text variant="bodySmall" style={styles.duration}>
@@ -101,12 +113,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   artist: {
-    color: '#888',
+    color: '#4a9eff',
     textAlign: 'center',
     marginBottom: 4,
   },
   album: {
-    color: '#666',
+    color: '#4a9eff',
     textAlign: 'center',
     marginBottom: 4,
   },

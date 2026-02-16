@@ -15,10 +15,11 @@ export type RootStackParamList = {
   ResetPassword: { email: string; fromSettings?: boolean };
 };
 
-/** In-app stack (inside App): Library, Settings, ArtistDetail, AlbumDetail, TrackDetail, ForgotPassword, ResetPassword */
+/** In-app stack (inside App): Library, Settings, History, ArtistDetail, AlbumDetail, TrackDetail, ForgotPassword, ResetPassword */
 export type AppStackParamList = {
   Library: undefined;
   Settings: undefined;
+  History: undefined;
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
   AlbumDetail: { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
   TrackDetail: { trackId: number };

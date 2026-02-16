@@ -146,7 +146,11 @@ export default function AlbumDetailScreen() {
       <Text variant="headlineSmall" style={styles.title}>
         {displayTitle}
       </Text>
-      <Text variant="bodyLarge" style={styles.artist}>
+      <Text
+        variant="bodyLarge"
+        style={styles.artist}
+        onPress={() => primaryAlbum && navigation.navigate('ArtistDetail', { artistIds: [primaryAlbum.artist_id], artistName: primaryAlbum.artist_name || 'Unknown' })}
+      >
         {artistNames}
       </Text>
       {primaryAlbum.year && (
@@ -261,7 +265,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   artist: {
-    color: '#888',
+    color: '#4a9eff',
     textAlign: 'center',
     paddingHorizontal: 16,
     marginTop: 4,

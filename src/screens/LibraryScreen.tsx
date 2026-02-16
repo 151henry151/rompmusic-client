@@ -267,13 +267,31 @@ export default function LibraryScreen() {
   );
 
   const renderTrackListRow = (
-    t: { id: number; title: string; artist_name?: string; album_id: number; album_title?: string },
+    t: { id: number; title: string; artist_name?: string; artist_id?: number; album_id: number; album_title?: string },
     list: typeof tracks
   ) => (
     <List.Item
       key={t.id}
       title={t.title}
-      description={`${t.artist_name || 'Unknown'} • ${t.album_title || 'Unknown'}`}
+      description={
+        <View style={styles.trackDescRow}>
+          <Text
+            variant="bodySmall"
+            style={styles.trackDescLink}
+            onPress={(e) => { e?.stopPropagation?.(); navigation.navigate('ArtistDetail', { artistIds: [t.artist_id ?? 0], artistName: t.artist_name || 'Unknown' }); }}
+          >
+            {t.artist_name || 'Unknown'}
+          </Text>
+          <Text variant="bodySmall" style={styles.trackDescSep}> • </Text>
+          <Text
+            variant="bodySmall"
+            style={styles.trackDescLink}
+            onPress={(e) => { e?.stopPropagation?.(); navigation.navigate('AlbumDetail', { albumId: t.album_id }); }}
+          >
+            {t.album_title || 'Unknown'}
+          </Text>
+        </View>
+      }
       left={() => (
         <TouchableOpacity
           onPress={(e) => {
@@ -352,6 +370,14 @@ export default function LibraryScreen() {
             >
               Sign in
             </Button>
+          )}
+          {user && (
+            <IconButton
+              icon="clock-outline"
+              onPress={() => navigation.navigate('History')}
+              iconColor="#888"
+              accessibilityLabel="Play history"
+            />
           )}
           <IconButton
             icon="cog"
@@ -507,6 +533,17 @@ const styles = StyleSheet.create({
   },
   trackListItem: {
     backgroundColor: '#1a1a1a',
+  },
+  trackDescRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  trackDescLink: {
+    color: '#4a9eff',
+  },
+  trackDescSep: {
+    color: '#666',
   },
   trackListArtworkWrap: {
     position: 'relative',
