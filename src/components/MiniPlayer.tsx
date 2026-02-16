@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { Text, IconButton, List, Switch } from 'react-native-paper';
+import { Text, Icon, IconButton, List, Switch } from 'react-native-paper';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from './ArtworkImage';
 import type { Track } from '../store/playerStore';
@@ -98,6 +98,17 @@ export default function MiniPlayer({ onExpand }: Props) {
         </View>
       )}
 
+      <View style={styles.chevronRow}>
+        <TouchableOpacity
+          style={styles.chevronButton}
+          onPress={() => setQueuePanelOpen((o) => !o)}
+          accessibilityLabel="Queue"
+          accessibilityRole="button"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Icon source="chevron-up" size={20} color="#888" />
+        </TouchableOpacity>
+      </View>
       <View style={styles.barRow}>
         <TouchableOpacity
           style={styles.barTouchable}
@@ -119,17 +130,6 @@ export default function MiniPlayer({ onExpand }: Props) {
               <Text variant="bodySmall" style={styles.time}>{formatTime(duration)}</Text>
             </View>
             <View style={styles.progressBlock}>
-              <TouchableOpacity
-                style={styles.caretWrap}
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  setQueuePanelOpen((o) => !o);
-                }}
-                accessibilityLabel="Queue"
-                accessibilityRole="button"
-              >
-                <Text style={styles.caret}>^</Text>
-              </TouchableOpacity>
               <Slider
                 value={progress}
                 minimumValue={0}
@@ -240,6 +240,15 @@ const styles = StyleSheet.create({
   artist: {
     color: '#888',
   },
+  chevronRow: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  chevronButton: {
+    padding: 4,
+  },
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -251,16 +260,6 @@ const styles = StyleSheet.create({
   },
   progressBlock: {
     marginTop: 2,
-  },
-  caretWrap: {
-    alignSelf: 'center',
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  caret: {
-    color: '#888',
-    fontSize: 14,
-    fontWeight: '600',
   },
   slider: {
     marginVertical: 0,

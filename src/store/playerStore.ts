@@ -61,6 +61,8 @@ interface PlayerState {
 
 let sound: AudioPlayer | null = null;
 let nextSound: AudioPlayer | null = null;
+/** True after we've prestarted nextSound (play at volume 0); reset when we promote. */
+let prestartedNext = false;
 
 function getStreamUrl(track: Track): string {
   const format = getStreamFormat();
@@ -77,7 +79,7 @@ function loadAndPlay(
   position = 0
 ): AudioPlayer {
   const url = getStreamUrl(track);
-  const player = createAudioPlayer(url, { updateInterval: 500, downloadFirst: true });
+  const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: true });
   player.volume = currentVolume;
   if (position > 0) {
     player.seekTo(position);
@@ -85,8 +87,14 @@ function loadAndPlay(
   let finished = false;
   player.addListener('playbackStatusUpdate', (status) => {
     onPositionUpdate(status.currentTime);
-    // didJustFinish can be unreliable on some platforms (e.g. web); also detect end by position
-    const atEnd = status.isLoaded && status.duration > 0 && status.currentTime >= Math.max(0, status.duration - 0.5) && !status.playing;
+    const dur = status.duration ?? 0;
+    const pos = status.currentTime ?? 0;
+    if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - 0.4)) {
+      prestartedNext = true;
+      nextSound.volume = 0;
+      nextSound.play();
+    }
+    const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - 0.02);
     if (!finished && (status.didJustFinish || atEnd)) {
       finished = true;
       onFinish();
@@ -99,7 +107,7 @@ function loadAndPlay(
 function preloadNext(track: Track): AudioPlayer | null {
   try {
     const url = getStreamUrl(track);
-    return createAudioPlayer(url, { updateInterval: 500, downloadFirst: true });
+    return createAudioPlayer(url, { updateInterval: 150, downloadFirst: true });
   } catch {
     return null;
   }
@@ -122,25 +130,23 @@ function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null):
   });
 }
 
-/** Call play() once the player is loaded; avoids silent no-op on some platforms when promoting preloaded track. */
-function playWhenLoaded(player: AudioPlayer): void {
+/** Call play(); if not loaded yet, call again when isLoaded (keeps preload, no extra request). */
+function playNowOrWhenLoaded(player: AudioPlayer): void {
+  player.play();
   const status = (player as { currentStatus?: { isLoaded?: boolean } }).currentStatus;
-  if (status?.isLoaded) {
-    player.play();
-    return;
-  }
-  let played = false;
-  const doPlay = () => {
-    if (played) return;
-    played = true;
+  if (status?.isLoaded) return;
+  let done = false;
+  const tryPlay = () => {
+    if (done) return;
+    done = true;
     player.play();
   };
-  const timeout = setTimeout(doPlay, 5000);
+  const t = setTimeout(tryPlay, 4000);
   const unsub = player.addListener('playbackStatusUpdate', (s: { isLoaded?: boolean }) => {
     if (s.isLoaded) {
-      clearTimeout(timeout);
+      clearTimeout(t);
       unsub?.remove?.();
-      doPlay();
+      tryPlay();
     }
   });
 }
@@ -242,6 +248,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         nextSound?.remove();
         sound = null;
         nextSound = null;
+        prestartedNext = false;
         set({ isPlaying: false, currentTrack: null });
         return;
       }
@@ -249,25 +256,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue: q, currentIndex: ci } = get();
     const nextIndex = ci + 1;
     const nextTrack = q[nextIndex];
-    if (nextSound) {
-      sound?.remove();
-      sound = nextSound;
+    const preloaded = nextSound;
+    if (preloaded) {
       nextSound = null;
+      prestartedNext = false;
+      sound?.remove();
+      sound = preloaded;
       sound.volume = currentVolume;
       let finished = false;
       sound.addListener('playbackStatusUpdate', (status) => {
         set({ position: status.currentTime });
-        const atEnd = status.isLoaded && status.duration > 0 && status.currentTime >= Math.max(0, status.duration - 0.5) && !status.playing;
+        const dur = status.duration ?? 0;
+        const pos = status.currentTime ?? 0;
+        if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - 0.4)) {
+          prestartedNext = true;
+          nextSound.volume = 0;
+          nextSound.play();
+        }
+        const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - 0.02);
         if (!finished && (status.didJustFinish || atEnd)) {
           finished = true;
           get().skipToNext();
         }
       });
-      playWhenLoaded(sound);
+      if (!(sound as { currentStatus?: { playing?: boolean } }).currentStatus?.playing) {
+        playNowOrWhenLoaded(sound);
+      }
       setLockScreenMetadata(sound, nextTrack);
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
       if (nextNext) nextSound = preloadNext(nextNext);
     } else {
+      prestartedNext = false;
       sound?.remove();
       sound = loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
       setLockScreenMetadata(sound, nextTrack);
@@ -287,17 +306,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     sound?.remove();
     nextSound?.remove();
     nextSound = null;
+    prestartedNext = false;
     sound = loadAndPlay(prevTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
     setLockScreenMetadata(sound, prevTrack);
     set({ currentTrack: prevTrack, currentIndex: currentIndex - 1, position: 0, duration: prevTrack.duration });
   },
 
   playTrack: async (track, queue = []) => {
-    // Unload current and preloaded players so play() loads the new selection instead of resuming.
     sound?.remove();
     sound = null;
     nextSound?.remove();
     nextSound = null;
+    prestartedNext = false;
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;
@@ -312,6 +332,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   playNext: (tracks) => {
     const arr = Array.isArray(tracks) ? tracks : [tracks];
+    nextSound?.remove();
+    nextSound = null;
+    prestartedNext = false;
     set((s) => {
       const { queue, currentIndex } = s;
       const insertAt = currentIndex + 1;
@@ -319,6 +342,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       next.splice(insertAt, 0, ...arr);
       return { queue: next, autoplayStartIndex: null };
     });
+    const { queue: q, currentIndex: ci } = get();
+    const newNextIndex = ci + 1;
+    if (newNextIndex < q.length) {
+      nextSound = preloadNext(q[newNextIndex]);
+    }
   },
 
   clearQueue: () => {
