@@ -5,20 +5,17 @@
 
 import React from 'react';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, StyleSheet } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { IconButton } from 'react-native-paper';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import VerifyEmailScreen from '../screens/VerifyEmailScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
-import HomeScreen from '../screens/HomeScreen';
 import LibraryScreen from '../screens/LibraryScreen';
-import SearchScreen from '../screens/SearchScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlayerScreen from '../screens/PlayerScreen';
 import ArtistDetailScreen from '../screens/ArtistDetailScreen';
@@ -28,9 +25,10 @@ import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore, type Track } from '../store/playerStore';
 import { useSettingsStore } from '../store/settingsStore';
+import type { RootStackParamList, AppStackParamList } from './types';
 
-const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const AppStack = createNativeStackNavigator<AppStackParamList>();
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -38,43 +36,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
   },
 });
-
-function MainTabs() {
-  return (
-    <View style={styles.wrapper}>
-      <Tab.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: '#0a0a0a' },
-          headerTintColor: '#fff',
-          tabBarStyle: { backgroundColor: '#0a0a0a' },
-          tabBarActiveTintColor: '#4a9eff',
-          tabBarInactiveTintColor: '#666',
-        }}
-      >
-        <Tab.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ tabBarIcon: ({ color, size }) => <Icon source="home" color={color} size={size} /> }}
-        />
-        <Tab.Screen
-          name="Search"
-          component={SearchScreen}
-          options={{ tabBarIcon: ({ color, size }) => <Icon source="magnify" color={color} size={size} /> }}
-        />
-        <Tab.Screen
-          name="Library"
-          component={LibraryScreen}
-          options={{ headerShown: false, tabBarIcon: ({ color, size }) => <Icon source="music-box-multiple" color={color} size={size} /> }}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ tabBarIcon: ({ color, size }) => <Icon source="cog" color={color} size={size} /> }}
-        />
-      </Tab.Navigator>
-    </View>
-  );
-}
 
 function AuthenticatedLayout() {
   const insets = useSafeAreaInsets();
@@ -98,24 +59,57 @@ function AuthenticatedLayout() {
 
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Main" component={MainTabs} />
-        <Stack.Screen
+      <AppStack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { flex: 1 },
+        }}
+      >
+        <AppStack.Screen name="Library" component={LibraryScreen} />
+        <AppStack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: 'Settings',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            headerLeft: () => (
+              <IconButton
+                icon="arrow-left"
+                iconColor="#fff"
+                onPress={() => navigation.goBack()}
+                accessibilityLabel="Back"
+              />
+            ),
+          })}
+        />
+        <AppStack.Screen
           name="ArtistDetail"
           component={ArtistDetailScreen}
           options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
         />
-        <Stack.Screen
+        <AppStack.Screen
           name="AlbumDetail"
           component={AlbumDetailScreen}
           options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
         />
-        <Stack.Screen
+        <AppStack.Screen
           name="TrackDetail"
           component={TrackDetailScreen}
           options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
         />
-      </Stack.Navigator>
+        <AppStack.Screen
+          name="ForgotPassword"
+          component={ForgotPasswordScreen}
+          options={{ headerShown: true, headerTitle: 'Change password', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+        <AppStack.Screen
+          name="ResetPassword"
+          component={ResetPasswordScreen}
+          options={{ headerShown: true, headerTitle: 'Reset password', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+      </AppStack.Navigator>
       {showPlayer && (
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
           <PlayerScreen onClose={() => setShowPlayer(false)} />
@@ -127,7 +121,7 @@ function AuthenticatedLayout() {
 }
 
 export default function AppNavigator() {
-  const { user, isReady } = useAuthStore();
+  const { isReady } = useAuthStore();
 
   if (!isReady) return null;
 
@@ -145,19 +139,17 @@ export default function AppNavigator() {
         },
       }}
     >
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-            <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-          </>
-        ) : (
-          <Stack.Screen name="App" component={AuthenticatedLayout} />
-        )}
-      </Stack.Navigator>
+      <RootStack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName="App"
+      >
+        <RootStack.Screen name="App" component={AuthenticatedLayout} />
+        <RootStack.Screen name="Login" component={LoginScreen} />
+        <RootStack.Screen name="Register" component={RegisterScreen} />
+        <RootStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+        <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <RootStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      </RootStack.Navigator>
     </NavigationContainer>
   );
 }

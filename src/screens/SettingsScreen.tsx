@@ -4,27 +4,27 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
-import { Text, List, Button, Switch, Menu } from 'react-native-paper';
+import { ScrollView, StyleSheet, Linking } from 'react-native';
+import { Text, List, Button, Switch, Menu, Dialog, Portal } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 
+
 export default function SettingsScreen() {
+  const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const restoreSettings = useSettingsStore((s) => s.restoreSettings);
   const groupArtistsByCapitalization = useSettingsStore((s) => s.groupArtistsByCapitalization);
   const setGroupArtistsByCapitalization = useSettingsStore((s) => s.setGroupArtistsByCapitalization);
-  const displayAlbumsWithoutArtwork = useSettingsStore((s) => s.displayAlbumsWithoutArtwork);
-  const setDisplayAlbumsWithoutArtwork = useSettingsStore((s) => s.setDisplayAlbumsWithoutArtwork);
-  const displayArtistsWithoutArtwork = useSettingsStore((s) => s.displayArtistsWithoutArtwork);
-  const setDisplayArtistsWithoutArtwork = useSettingsStore((s) => s.setDisplayArtistsWithoutArtwork);
-  const groupCollaborationsByPrimary = useSettingsStore((s) => s.groupCollaborationsByPrimary);
-  const setGroupCollaborationsByPrimary = useSettingsStore((s) => s.setGroupCollaborationsByPrimary);
   const streamFormat = useSettingsStore((s) => s.getEffectiveStreamFormat());
   const setStreamFormat = useSettingsStore((s) => s.setStreamFormat);
   const isSettingVisible = useSettingsStore((s) => s.isSettingVisible);
   const [audioMenuVisible, setAudioMenuVisible] = useState(false);
+  const [aboutVisible, setAboutVisible] = useState(false);
+
+  const WEBSITE_BASE = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://rompmusic.com';
 
   useEffect(() => {
     restoreSettings();
@@ -54,66 +54,26 @@ export default function SettingsScreen() {
           style={styles.item}
         />
       )}
-      {isSettingVisible('display_albums_without_artwork') && (
-        <List.Item
-          title="Display albums without artwork"
-          description="When off (default), albums with no cover art are hidden. Search always shows all."
-          left={() => <List.Icon icon="album" />}
-          right={() => (
-            <Switch
-              value={displayAlbumsWithoutArtwork}
-              onValueChange={setDisplayAlbumsWithoutArtwork}
-              color="#4a9eff"
-            />
-          )}
-          style={styles.item}
-        />
-      )}
-      {isSettingVisible('display_artists_without_artwork') && (
-        <List.Item
-          title="Display artists without artwork"
-          description="When off (default), artists with no picture are hidden. Search always shows all."
-          left={() => <List.Icon icon="account" />}
-          right={() => (
-            <Switch
-              value={displayArtistsWithoutArtwork}
-              onValueChange={setDisplayArtistsWithoutArtwork}
-              color="#4a9eff"
-            />
-          )}
-          style={styles.item}
-        />
-      )}
-      {isSettingVisible('group_collaborations_by_primary') && (
-        <List.Item
-          title="Group collaborations by primary artist"
-          description="When on, entries like Miles Davis Quintet or Charlie Parker Sextet are grouped under the primary artist (Miles Davis, Charlie Parker)."
-          left={() => <List.Icon icon="account-group" />}
-          right={() => (
-            <Switch
-              value={groupCollaborationsByPrimary}
-              onValueChange={setGroupCollaborationsByPrimary}
-              color="#4a9eff"
-            />
-          )}
-          style={styles.item}
-        />
-      )}
-
       <Text variant="titleSmall" style={styles.section}>
         Account
       </Text>
       <List.Item
         title="Profile"
-        description={user ? user.username : 'Not logged in'}
+        description={user ? (user.email ? `${user.username} • ${user.email}` : user.username) : 'Tap to sign in'}
         left={() => <List.Icon icon="account" />}
+        onPress={!user ? () => navigation.navigate('Login') : undefined}
+        right={!user ? (props) => <List.Icon {...props} icon="chevron-right" /> : undefined}
         style={styles.item}
+        accessibilityRole="button"
       />
       <List.Item
-        title="Account"
-        description="Manage your account"
+        title="Change password"
+        description="Request a reset code sent to your email"
         left={() => <List.Icon icon="account-cog" />}
+        right={(props) => <List.Icon {...props} icon="chevron-right" />}
+        onPress={() => navigation.navigate('ForgotPassword', { fromSettings: true })}
         style={styles.item}
+        accessibilityRole="button"
       />
 
       <Text variant="titleSmall" style={styles.section}>
@@ -121,7 +81,7 @@ export default function SettingsScreen() {
       </Text>
       <List.Item
         title="Gapless playback"
-        description="Seamless transition between tracks"
+        description="Enabled • Albums play seamlessly with no gaps between tracks"
         left={() => <List.Icon icon="music" />}
         style={styles.item}
       />
@@ -152,14 +112,45 @@ export default function SettingsScreen() {
         title="About"
         description="RompMusic 0.1.0-beta.1"
         left={() => <List.Icon icon="information" />}
+        right={(props) => <List.Icon {...props} icon="chevron-right" />}
+        onPress={() => setAboutVisible(true)}
         style={styles.item}
+        accessibilityRole="button"
       />
       <List.Item
-        title="Privacy"
-        description="Privacy policy and data usage"
+        title="Privacy Policy"
+        description="View our full privacy policy"
         left={() => <List.Icon icon="shield-account" />}
+        right={(props) => <List.Icon {...props} icon="open-in-new" />}
+        onPress={() => Linking.openURL(`${WEBSITE_BASE}/privacy`)}
         style={styles.item}
+        accessibilityRole="link"
       />
+      <List.Item
+        title="Terms of Service"
+        description="View our terms of service"
+        left={() => <List.Icon icon="file-document" />}
+        right={(props) => <List.Icon {...props} icon="open-in-new" />}
+        onPress={() => Linking.openURL(`${WEBSITE_BASE}/tos`)}
+        style={styles.item}
+        accessibilityRole="link"
+      />
+
+      <Portal>
+        <Dialog visible={aboutVisible} onDismiss={() => setAboutVisible(false)} style={styles.dialog}>
+          <Dialog.Title>About RompMusic</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={styles.dialogText}>
+              RompMusic 0.1.0-beta.1{'\n\n'}
+              Libre music streaming. Free as in freedom.{'\n\n'}
+              Licensed under GPL-3.0. Use, study, modify, and share. Self-hosted — your music stays on your server. No tracking, no ads.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAboutVisible(false)}>OK</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Button mode="contained" onPress={logout} style={styles.logout}>
         Log out
@@ -188,5 +179,12 @@ const styles = StyleSheet.create({
   },
   logout: {
     margin: 16,
+  },
+  dialog: {
+    backgroundColor: '#1a1a1a',
+  },
+  dialogText: {
+    color: '#e0e0e0',
+    lineHeight: 24,
   },
 });

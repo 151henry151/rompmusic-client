@@ -7,14 +7,18 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
+import type { RootStackParamList } from '../navigation/types';
+
+type Props = NativeStackNavigationProp<RootStackParamList, 'Register'>;
 
 export default function RegisterScreen() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { register, isLoading } = useAuthStore();
-  const navigation = useNavigation();
+  const navigation = useNavigation<Props>();
 
   const handleRegister = async () => {
     if (!username.trim()) {
@@ -31,7 +35,7 @@ export default function RegisterScreen() {
     }
     try {
       await register(username.trim(), email.trim(), password);
-      navigation.navigate('VerifyEmail' as never, { email: email.trim() } as never);
+      navigation.navigate('VerifyEmail', { email: email.trim() });
     } catch (e) {
       Alert.alert('Registration failed', e instanceof Error ? e.message : 'Could not create account');
     }

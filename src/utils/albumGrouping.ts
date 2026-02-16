@@ -19,28 +19,43 @@ export interface AlbumLike {
 }
 
 /**
- * Normalize album title for grouping. Strips trailing " (N)" where N is a number
- * (multi-disc suffix) for comparison.
+ * Disc-number suffix patterns for multi-disc albums. Applied in order; first match wins.
+ * Handles: "Album (1)", "Album (Disc 1)", "Album (CD 1)", "Album (Disc One)", etc.
+ */
+const DISC_SUFFIX_PATTERNS = [
+  /\s*\((?:disc|cd)\s*\d+\)\s*$/i,
+  /\s*\((?:disc|cd)\s+(?:one|two|three|four|five|six|seven|eight|nine|ten)\)\s*$/i,
+  /\s*\(\d+\)\s*$/, // (1), (2), (3)
+  /\s*[-–]\s*(?:disc|cd)\s*\d+\s*$/i,
+  /\s*[-–]\s*pt\.?\s*\d+\s*$/i,
+  /\s*[-–]\s*part\s+\d+\s*$/i,
+];
+
+function stripDiscSuffix(title: string): string {
+  let t = title.trim();
+  for (const re of DISC_SUFFIX_PATTERNS) {
+    const match = t.match(re);
+    if (match) {
+      t = t.slice(0, t.length - match[0].length).trim();
+      break;
+    }
+  }
+  return t;
+}
+
+/**
+ * Normalize album title for grouping. Strips multi-disc suffixes so
+ * "At Fillmore (Disc 1)" and "At Fillmore (Disc 2)" group together.
  */
 function normalizeTitleForGrouping(title: string): string {
-  const t = title.trim();
-  const match = t.match(/^(.*?)\s*\((\d+)\)\s*$/);
-  if (match) {
-    return match[1].trim().toLowerCase();
-  }
-  return t.toLowerCase();
+  return stripDiscSuffix(title).toLowerCase();
 }
 
 /**
  * Get display title for a grouped album (without disc number suffix).
  */
 export function getAlbumDisplayTitle(title: string): string {
-  const t = title.trim();
-  const match = t.match(/^(.*?)\s*\((\d+)\)\s*$/);
-  if (match) {
-    return match[1].trim();
-  }
-  return t;
+  return stripDiscSuffix(title.trim());
 }
 
 /**
@@ -147,8 +162,11 @@ function deduplicateAlbumArtwork(groups: AlbumGroup[]): AlbumGroup[] {
       albums.find((i) => i.has_artwork && !usedAlbumIds.has(i.id)) ??
       albums.find((i) => !usedAlbumIds.has(i.id)) ??
       albums[0];
-    const usePlaceholderArtwork = usedAlbumIds.has(primaryAlbum.id);
-    if (!usePlaceholderArtwork) usedAlbumIds.add(primaryAlbum.id);
+    const usePlaceholderArtwork =
+      primaryAlbum.has_artwork !== true || usedAlbumIds.has(primaryAlbum.id);
+    if (primaryAlbum.has_artwork === true && !usedAlbumIds.has(primaryAlbum.id)) {
+      usedAlbumIds.add(primaryAlbum.id);
+    }
     return {
       ...g,
       primaryAlbum,

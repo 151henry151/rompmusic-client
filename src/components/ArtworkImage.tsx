@@ -4,13 +4,13 @@
  */
 
 import React, { useState } from 'react';
-import { Image, View, StyleSheet } from 'react-native';
+import { Image, View, StyleSheet, Platform } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../api/client';
 
 interface Props {
-  type: 'album' | 'artist';
+  type: 'album';
   id: number;
   size?: number;
   style?: object;
@@ -30,6 +30,28 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius 
     return (
       <View style={[styles.placeholder, boxStyle, style]}>
         <Icon source="music" size={size * 0.5} color="#666" />
+      </View>
+    );
+  }
+
+  // On web, use native <img> to avoid React Native Web Image quirks that can block loading
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.placeholder, boxStyle, style]}>
+        <img
+          src={uri}
+          alt=""
+          width={size}
+          height={size}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: radius,
+            objectFit: 'cover',
+            display: 'block',
+          }}
+          onError={() => setFailed(true)}
+        />
       </View>
     );
   }

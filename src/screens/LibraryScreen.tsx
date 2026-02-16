@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SegmentedButtons, Text, IconButton, Menu, Divider, List, Switch } from 'react-native-paper';
+import { Text, IconButton, Menu, Divider, List, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
@@ -17,12 +17,8 @@ import type { Track } from '../store/playerStore';
 import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
 import { groupAlbums, groupAlbumsWithCollab } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
-
-type RootStackParamList = {
-  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
-  AlbumDetail: { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
-  TrackDetail: { trackId: number };
-};
+import { useAuthStore } from '../store/authStore';
+import type { AppStackParamList } from '../navigation/types';
 
 const CARD_GAP = 10;
 const HORIZONTAL_PADDING = 16;
@@ -78,56 +74,36 @@ function groupByDecade<T extends { year?: number | null }>(items: T[]): { decade
 type TabType = 'artists' | 'albums' | 'songs';
 
 export default function LibraryScreen() {
-  const [tab, setTab] = useState<TabType>('artists');
-  const [sortBy, setSortBy] = useState({ artists: 'name', albums: 'year', songs: 'title' });
-  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [tab, setTab] = useState<TabType>('albums');
+  const [sortBy, setSortBy] = useState({ artists: 'name', albums: 'title', songs: 'title' });
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
+  const [tabMenuVisible, setTabMenuVisible] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'ArtistDetail'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Library'>>();
   const playTrack = usePlayerStore((s) => s.playTrack);
   const groupArtistsByCapitalization = useSettingsStore((s) => s.getEffectiveGroupArtistsByCapitalization());
   const groupCollaborationsByPrimary = useSettingsStore((s) => s.getEffectiveGroupCollaborationsByPrimary());
-  const setGroupCollaborationsByPrimary = useSettingsStore((s) => s.setGroupCollaborationsByPrimary);
-  const isSettingVisible = useSettingsStore((s) => s.isSettingVisible);
-  const displayAlbumsWithoutArtwork = useSettingsStore((s) => s.getEffectiveDisplayAlbumsWithoutArtwork());
-  const setDisplayAlbumsWithoutArtwork = useSettingsStore((s) => s.setDisplayAlbumsWithoutArtwork);
-  const displayArtistsWithoutArtwork = useSettingsStore((s) => s.getEffectiveDisplayArtistsWithoutArtwork());
-  const setDisplayArtistsWithoutArtwork = useSettingsStore((s) => s.setDisplayArtistsWithoutArtwork);
+  const user = useAuthStore((s) => s.user);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
   const cardsPerRow = isMobile ? 3 : 5;
-  const cardWidth = (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow;
+  const cardWidth = Math.max(100, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
   const currentSortBy = tab === 'artists' ? sortBy.artists : tab === 'albums' ? sortBy.albums : sortBy.songs;
   const sortOptions = tab === 'artists' ? ARTIST_SORTS : tab === 'albums' ? ALBUM_SORTS : TRACK_SORTS;
+  const tabLabel = tab === 'albums' ? 'Albums' : tab === 'artists' ? 'Artists' : 'Songs';
 
-  const { data: artistsRaw } = useQuery({
-    queryKey: ['artists', sortBy.artists, order],
-    queryFn: () => api.getArtists({ limit: 500, sort_by: sortBy.artists, order }),
+  const { data: artistsRaw, isLoading: artistsLoading, error: artistsError } = useQuery({
+    queryKey: ['artists', sortBy.artists, order, searchQuery],
+    queryFn: () => api.getArtists({ limit: 500, sort_by: sortBy.artists, order, search: searchQuery || undefined }),
   });
-  const { groupedArtists, usePlaceholderArtistIds } = useMemo(() => {
-    let raw = artistsRaw || [];
-    if (!displayArtistsWithoutArtwork) {
-      raw = raw.filter((a: { has_artwork?: boolean | null }) => a.has_artwork !== false);
-    }
-    const usePlaceholderArtistIds = new Set<number>();
-    if (!groupCollaborationsByPrimary) {
-      const byTitle = new Map<string, { id: number }[]>();
-      for (const a of raw as { id: number; primary_album_title?: string | null }[]) {
-        const t = (a.primary_album_title || '').trim().toLowerCase();
-        if (t) {
-          if (!byTitle.has(t)) byTitle.set(t, []);
-          byTitle.get(t)!.push({ id: a.id });
-        }
-      }
-      for (const [, items] of byTitle) {
-        if (items.length >= 3) {
-          for (const { id } of items) usePlaceholderArtistIds.add(id);
-        }
-      }
-    }
+  const { groupedArtists } = useMemo(() => {
+    const raw = artistsRaw || [];
     let groups: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }[];
     if (groupCollaborationsByPrimary) {
       groups = groupArtistsByPrimaryName(raw);
@@ -140,27 +116,29 @@ export default function LibraryScreen() {
     } else {
       groups = groupArtistsByNormalizedName(raw);
     }
-    return { groupedArtists: groups, usePlaceholderArtistIds };
-  }, [artistsRaw, displayArtistsWithoutArtwork, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
-  const { data: albumsRaw } = useQuery({
-    queryKey: ['albums', sortBy.albums, order],
-    queryFn: () => api.getAlbums({ limit: 500, sort_by: sortBy.albums, order }),
+    return { groupedArtists: groups };
+  }, [artistsRaw, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
+  const { data: albumsRaw, isLoading: albumsLoading, error: albumsError } = useQuery({
+    queryKey: ['albums', sortBy.albums, order, searchQuery],
+    queryFn: () => api.getAlbums({ limit: 500, sort_by: sortBy.albums, order, search: searchQuery || undefined }),
   });
-  const albums = useMemo(() => {
-    const list = albumsRaw || [];
-    if (!displayAlbumsWithoutArtwork) {
-      return list.filter((a: { has_artwork?: boolean | null }) => a.has_artwork !== false);
-    }
-    return list;
-  }, [albumsRaw, displayAlbumsWithoutArtwork]);
-  const albumGroups = useMemo(
-    () => (groupCollaborationsByPrimary ? groupAlbumsWithCollab(albums) : groupAlbums(albums)),
-    [albums, groupCollaborationsByPrimary]
-  );
-  const { data: tracks } = useQuery({
-    queryKey: ['tracks', sortBy.songs, order],
-    queryFn: () => api.getTracks({ limit: 1000, sort_by: sortBy.songs, order }),
+  const albums = albumsRaw || [];
+  const albumGroups = useMemo(() => {
+    return groupCollaborationsByPrimary ? groupAlbumsWithCollab(albums) : groupAlbums(albums);
+  }, [albums, groupCollaborationsByPrimary]);
+  const { data: tracks, isLoading: tracksLoading, error: tracksError } = useQuery({
+    queryKey: ['tracks', sortBy.songs, order, searchQuery],
+    queryFn: () => api.getTracks({ limit: 1000, sort_by: sortBy.songs, order, search: searchQuery || undefined }),
   });
+
+  const anyLoading = artistsLoading || albumsLoading || tracksLoading;
+  const anyError = artistsError || albumsError || tracksError;
+  const allSettledEmpty =
+    !anyLoading &&
+    !anyError &&
+    (groupedArtists?.length ?? 0) === 0 &&
+    albumGroups.length === 0 &&
+    (tracks || []).length === 0;
 
   const albumsGroupedByDecade = useMemo(() => {
     if (sortBy.albums !== 'year') return null;
@@ -181,17 +159,34 @@ export default function LibraryScreen() {
     }
   };
 
-  const handleTrackPlay = (track: Track & { album_title?: string; artist_name?: string }, queue: typeof tracks) => {
-    const q = (queue || []).map((t) => ({
-      id: t.id,
-      title: t.title,
-      artist_id: t.artist_id,
-      album_id: t.album_id,
-      artist_name: t.artist_name,
-      album_title: t.album_title,
-    }));
-    playTrack(track, q);
+  const handleTrackPlay = (track: Track & { album_title?: string; artist_name?: string }, queue: (Track & { album_title?: string; artist_name?: string })[] | undefined) => {
+    playTrack(track, queue || []);
   };
+
+  const renderTabMenu = () => (
+    <Menu
+      visible={tabMenuVisible}
+      onDismiss={() => setTabMenuVisible(false)}
+      anchor={
+        <Button
+          mode="outlined"
+          compact
+          onPress={() => setTabMenuVisible(true)}
+          icon="chevron-down"
+          style={styles.tabButton}
+          contentStyle={styles.tabButtonContent}
+          labelStyle={styles.tabButtonLabel}
+        >
+          {tabLabel}
+        </Button>
+      }
+      anchorPosition="bottom"
+    >
+      <Menu.Item onPress={() => { setTab('albums'); setTabMenuVisible(false); }} title="Albums" leadingIcon="album" />
+      <Menu.Item onPress={() => { setTab('artists'); setTabMenuVisible(false); }} title="Artists" leadingIcon="account" />
+      <Menu.Item onPress={() => { setTab('songs'); setTabMenuVisible(false); }} title="Songs" leadingIcon="music" />
+    </Menu>
+  );
 
   const renderSortMenu = () => (
     <Menu
@@ -232,26 +227,18 @@ export default function LibraryScreen() {
     </Menu>
   );
 
-  const renderArtistCard = (g: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }) => (
-    <TouchableOpacity
+  const renderArtistRow = (g: { displayName: string; primaryId: number; artistIds: number[]; isAssortedArtists?: boolean }) => (
+    <List.Item
       key={g.primaryId}
-      style={[styles.card, { width: cardWidth }]}
+      title={g.displayName}
       onPress={() =>
         navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName, isAssortedArtists: g.isAssortedArtists })
       }
-      activeOpacity={0.7}
+      right={(props) => <List.Icon {...props} icon="chevron-right" />}
+      style={styles.artistListItem}
       accessibilityRole="button"
       accessibilityLabel={`View ${g.displayName}`}
-    >
-      {(usePlaceholderArtistIds.has(g.primaryId) || (g as { usePlaceholderArtwork?: boolean }).usePlaceholderArtwork) ? (
-        <ArtworkPlaceholder size={cardWidth} style={[styles.cardArtwork, { borderRadius: CARD_RADIUS }]} />
-      ) : (
-        <ArtworkImage type="artist" id={g.primaryId} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
-      )}
-      <Text variant="bodyMedium" numberOfLines={2} style={styles.cardTitle}>
-        {g.displayName}
-      </Text>
-    </TouchableOpacity>
+    />
   );
 
   const renderAlbumCard = (
@@ -309,7 +296,7 @@ export default function LibraryScreen() {
     />
   );
 
-  const renderAlbumSection = (title: string, items: any[], renderCard: (item: any, index: number, list?: any) => JSX.Element) => (
+  const renderAlbumSection = (title: string, items: unknown[], renderCard: (item: any, index: number, list?: any) => React.ReactElement) => (
     <View style={styles.decadeSection} key={title}>
       <Text variant="titleSmall" style={styles.decadeHeader}>
         {title}
@@ -320,97 +307,91 @@ export default function LibraryScreen() {
     </View>
   );
 
-  const renderSongsSection = (title: string, items: any[]) => (
+  const renderSongsSection = (title: string, items: (Track & { album_title?: string; artist_name?: string })[]) => (
     <View style={styles.decadeSection} key={title}>
       <Text variant="titleSmall" style={styles.decadeHeader}>
         {title}
       </Text>
-      {items.map((t) => renderTrackListRow(t, items))}
+      {items.map((t: Track & { album_title?: string; artist_name?: string }) => renderTrackListRow(t, items))}
     </View>
   );
 
+  const headerHeight = 56 + insets.top;
   return (
     <View style={styles.container}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }]}>
-        <SegmentedButtons
-          value={tab}
-          onValueChange={(v) => setTab(v as TabType)}
-          buttons={[
-            { value: 'artists', label: 'Artists' },
-            { value: 'albums', label: 'Albums' },
-            { value: 'songs', label: 'Songs' },
-          ]}
-          style={styles.segmented}
-        />
+        <View style={styles.tabDropdownWrap}>
+          {renderTabMenu()}
+        </View>
         <View style={styles.sortWrap}>
-          {tab === 'artists' && (
-            <>
-              {isSettingVisible('display_artists_without_artwork') && (
-                <View style={styles.inlineToggle}>
-                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
-                    No art
-                  </Text>
-                  <Switch
-                    value={displayArtistsWithoutArtwork}
-                    onValueChange={setDisplayArtistsWithoutArtwork}
-                    color="#4a9eff"
-                    style={styles.inlineSwitch}
-                  />
-                </View>
-              )}
-              {isSettingVisible('group_collaborations_by_primary') && (
-                <View style={styles.inlineToggle}>
-                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
-                    Group collab
-                  </Text>
-                  <Switch
-                    value={groupCollaborationsByPrimary}
-                    onValueChange={setGroupCollaborationsByPrimary}
-                    color="#4a9eff"
-                    style={styles.inlineSwitch}
-                  />
-                </View>
-              )}
-            </>
-          )}
-          {tab === 'albums' && (
-            <>
-              {isSettingVisible('display_albums_without_artwork') && (
-                <View style={styles.inlineToggle}>
-                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
-                    No art
-                  </Text>
-                  <Switch
-                    value={displayAlbumsWithoutArtwork}
-                    onValueChange={setDisplayAlbumsWithoutArtwork}
-                    color="#4a9eff"
-                    style={styles.inlineSwitch}
-                  />
-                </View>
-              )}
-              {isSettingVisible('group_collaborations_by_primary') && (
-                <View style={styles.inlineToggle}>
-                  <Text variant="labelSmall" style={styles.inlineToggleLabel}>
-                    Group collab
-                  </Text>
-                  <Switch
-                    value={groupCollaborationsByPrimary}
-                    onValueChange={setGroupCollaborationsByPrimary}
-                    color="#4a9eff"
-                    style={styles.inlineSwitch}
-                  />
-                </View>
-              )}
-            </>
-          )}
+          <TextInput
+            mode="outlined"
+            placeholder="Search…"
+            value={searchInput}
+            onChangeText={setSearchInput}
+            onSubmitEditing={() => setSearchQuery(searchInput.trim())}
+            returnKeyType="search"
+            dense
+            style={styles.searchInput}
+            left={<TextInput.Icon icon="magnify" />}
+            right={
+              searchInput ? (
+                <TextInput.Icon icon="close" onPress={() => { setSearchInput(''); setSearchQuery(''); }} />
+              ) : undefined
+            }
+            accessibilityLabel="Search library"
+          />
           {renderSortMenu()}
+          {!user && (
+            <Button
+              mode="outlined"
+              compact
+              onPress={() => (navigation as any).navigate('Login')}
+              style={styles.signInButton}
+              labelStyle={styles.signInButtonLabel}
+            >
+              Sign in
+            </Button>
+          )}
+          <IconButton
+            icon="cog"
+            onPress={() => navigation.navigate('Settings')}
+            iconColor="#888"
+            accessibilityLabel="Settings"
+          />
         </View>
       </View>
 
-      <ScrollView style={styles.scrollContent}>
+      <View style={[styles.scrollWrapper, { top: headerHeight }]}>
+        <ScrollView
+          style={styles.scrollContent}
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
+      {anyLoading && !artistsRaw && !albumsRaw && !tracks?.length && (
+        <View style={styles.loadingWrap}>
+          <Text variant="bodyLarge" style={styles.loadingText}>Loading library…</Text>
+        </View>
+      )}
+      {anyError && !artistsRaw && !albumsRaw && !tracks?.length && (
+        <View style={styles.loadingWrap}>
+          <Text variant="bodyLarge" style={styles.errorText}>
+            Failed to load: {(() => {
+              const err = artistsError || albumsError || tracksError;
+              return err instanceof Error ? err.message : String(err);
+            })()}
+          </Text>
+        </View>
+      )}
+      {allSettledEmpty && (
+        <View style={styles.loadingWrap}>
+          <Text variant="bodyLarge" style={styles.loadingText}>
+            No library items. Log in to the server dashboard and run a library scan to import your music.
+          </Text>
+        </View>
+      )}
       {tab === 'artists' && (
-        <View style={styles.grid}>
-          {groupedArtists.map((g) => renderArtistCard(g))}
+        <View style={styles.artistsList}>
+          {groupedArtists.map((g) => renderArtistRow(g))}
         </View>
       )}
 
@@ -425,13 +406,14 @@ export default function LibraryScreen() {
 
       {tab === 'songs' &&
         (tracksGroupedByDecade
-          ? tracksGroupedByDecade.map((g) => renderSongsSection(g.decade, g.items))
+          ? tracksGroupedByDecade.map((g) => renderSongsSection(g.decade, g.items as (Track & { album_title?: string; artist_name?: string })[]))
           : (
             <View style={styles.songsList}>
-              {(tracks || []).map((t) => renderTrackListRow(t, tracks || []))}
+              {(tracks || []).map((t: Track & { album_title?: string; artist_name?: string }) => renderTrackListRow(t, tracks || []))}
             </View>
           ))}
-      </ScrollView>
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -446,32 +428,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#0a0a0a',
+    flexShrink: 0,
+  },
+  scrollWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   scrollContent: {
     flex: 1,
   },
-  segmented: {
-    flex: 1,
-    margin: 16,
-    marginRight: 4,
+  tabDropdownWrap: {
+    paddingLeft: 16,
+    paddingRight: 8,
+    flexShrink: 0,
+  },
+  tabButton: {
+    backgroundColor: '#1a1a1a',
+    borderColor: '#333',
+    borderWidth: 1,
+  },
+  tabButtonContent: {
+    flexDirection: 'row-reverse',
+  },
+  tabButtonLabel: {
+    color: '#fff',
   },
   sortWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    flex: 1,
+    minWidth: 0,
     paddingRight: 8,
     gap: 8,
   },
-  inlineToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: '#1a1a1a',
   },
-  inlineToggleLabel: {
-    color: '#888',
-    marginRight: 4,
+  signInButton: {
+    borderColor: '#444',
   },
-  inlineSwitch: {
-    transform: [{ scale: 0.9 }],
+  signInButtonLabel: {
+    color: '#fff',
   },
   grid: {
     flexDirection: 'row',
@@ -494,6 +495,12 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     color: '#888',
     marginTop: 2,
+  },
+  artistsList: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+  },
+  artistListItem: {
+    backgroundColor: '#1a1a1a',
   },
   songsList: {
     paddingHorizontal: HORIZONTAL_PADDING,
@@ -527,5 +534,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  loadingWrap: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#888',
+  },
+  errorText: {
+    color: '#e57373',
   },
 });

@@ -7,14 +7,18 @@ import React, { useState, useRef } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
+import type { RootStackParamList } from '../navigation/types';
+
+type Props = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const passwordRef = useRef<any>(null);
   const { login, isLoading } = useAuthStore();
-  const navigation = useNavigation();
+  const navigation = useNavigation<Props>();
 
   const handleLogin = async () => {
     if (!username.trim() || !password) {
@@ -23,6 +27,7 @@ export default function LoginScreen() {
     }
     try {
       await login(username.trim(), password);
+      (navigation as any).goBack?.();
     } catch (e) {
       Alert.alert('Login failed', e instanceof Error ? e.message : 'Invalid credentials');
     }
@@ -73,7 +78,7 @@ export default function LoginScreen() {
         </Button>
         <Button
           mode="text"
-          onPress={() => navigation.navigate('ForgotPassword')}
+          onPress={() => navigation.navigate('ForgotPassword', {})}
           disabled={isLoading}
           style={styles.forgotButton}
         >

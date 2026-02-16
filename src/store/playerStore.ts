@@ -3,13 +3,21 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Gapless playback: preloads next track and transitions seamlessly.
+ * Uses expo-audio (expo-av is deprecated).
  */
 
 import { create } from 'zustand';
-import { Audio } from 'expo-av';
+import { Platform } from 'react-native';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { api } from '../api/client';
 import { getToken } from '../api/client';
 import { useSettingsStore } from './settingsStore';
+
+/** Web browsers need transcoded OGG; native can use original format. */
+function getStreamFormat(): 'original' | 'ogg' {
+  if (Platform.OS === 'web') return 'ogg';
+  return useSettingsStore.getState().getEffectiveStreamFormat();
+}
 
 export interface Track {
   id: number;
@@ -49,45 +57,41 @@ interface PlayerState {
   setAutoplay: (enabled: boolean) => void;
 }
 
-let sound: Audio.Sound | null = null;
-let nextSound: Audio.Sound | null = null;
+let sound: AudioPlayer | null = null;
+let nextSound: AudioPlayer | null = null;
 
-async function loadAndPlay(
+function getStreamUrl(track: Track): string {
+  const format = getStreamFormat();
+  let url = api.getStreamUrl(track.id, format);
+  const t = getToken();
+  if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
+  return url;
+}
+
+function loadAndPlay(
   track: Track,
   onFinish: () => void,
   onPositionUpdate: (pos: number) => void,
   position = 0
-): Promise<Audio.Sound> {
-  const format = useSettingsStore.getState().getEffectiveStreamFormat();
-  let url = api.getStreamUrl(track.id, format);
-  const t = getToken();
-  if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
-  const { sound: s } = await Audio.Sound.createAsync(
-    { uri: url },
-    { shouldPlay: true, positionMillis: position * 1000, volume: currentVolume },
-    (status) => {
-      if (status.isLoaded) {
-        if (status.didJustFinishAndNotLoop) onFinish();
-        else if ('positionMillis' in status) onPositionUpdate(status.positionMillis / 1000);
-      }
-    }
-  );
-  try {
-    await s.setProgressUpdateIntervalAsync(500);
-  } catch {
-    // Web may not support; position updates are best-effort
+): AudioPlayer {
+  const url = getStreamUrl(track);
+  const player = createAudioPlayer(url, { updateInterval: 500, downloadFirst: true });
+  player.volume = currentVolume;
+  if (position > 0) {
+    player.seekTo(position);
   }
-  return s;
+  player.addListener('playbackStatusUpdate', (status) => {
+    if (status.didJustFinish) onFinish();
+    else onPositionUpdate(status.currentTime);
+  });
+  player.play();
+  return player;
 }
 
-async function preloadNext(track: Track): Promise<Audio.Sound | null> {
+function preloadNext(track: Track): AudioPlayer | null {
   try {
-    const format = useSettingsStore.getState().getEffectiveStreamFormat();
-    let url = api.getStreamUrl(track.id, format);
-    const t = getToken();
-    if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
-    const { sound: s } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: false });
-    return s;
+    const url = getStreamUrl(track);
+    return createAudioPlayer(url, { updateInterval: 500, downloadFirst: true });
   } catch {
     return null;
   }
@@ -110,13 +114,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setVolume: async (v: number) => {
     currentVolume = Math.max(0, Math.min(1, v));
     set({ volume: currentVolume });
-    if (sound) {
-      try {
-        await sound.setVolumeAsync(currentVolume);
-      } catch {
-        /* best-effort */
-      }
-    }
+    if (sound) sound.volume = currentVolume;
   },
 
   setQueue: (tracks, startIndex = 0) => {
@@ -130,12 +128,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const onPosition = (pos: number) => set({ position: pos });
     try {
       if (sound) {
-        await sound.playAsync();
+        sound.play();
       } else {
         const nextIndex = currentIndex + 1;
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
-        sound = await loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position);
-        if (nextTrack) nextSound = await preloadNext(nextTrack);
+        sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position);
+        if (nextTrack) nextSound = preloadNext(nextTrack);
       }
       set({ isPlaying: true, isLoading: false });
     } catch (e) {
@@ -148,18 +146,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   pause: async () => {
     if (sound) {
-      const status = await sound.getStatusAsync();
-      if (status.isLoaded && 'positionMillis' in status) {
-        set({ position: status.positionMillis / 1000 });
-      }
-      await sound.pauseAsync();
+      set({ position: sound.currentTime });
+      sound.pause();
     }
     set({ isPlaying: false });
   },
 
   seekTo: async (seconds: number) => {
     if (sound) {
-      await sound.setPositionAsync(seconds * 1000);
+      await sound.seekTo(seconds);
       set({ position: seconds });
     }
   },
@@ -191,8 +186,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       const state = get();
       if (state.currentIndex + 1 >= state.queue.length) {
-        await sound?.unloadAsync();
-        await nextSound?.unloadAsync();
+        sound?.remove();
+        nextSound?.remove();
         sound = null;
         nextSound = null;
         set({ isPlaying: false, currentTrack: null });
@@ -203,50 +198,46 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const nextIndex = ci + 1;
     const nextTrack = q[nextIndex];
     if (nextSound) {
-      await sound?.unloadAsync();
+      sound?.remove();
       sound = nextSound;
       nextSound = null;
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && 'positionMillis' in status) set({ position: status.positionMillis / 1000 });
+      sound.volume = currentVolume;
+      sound.addListener('playbackStatusUpdate', (status) => {
+        if (status.didJustFinish) get().skipToNext();
+        else set({ position: status.currentTime });
       });
-      try {
-        await sound.setProgressUpdateIntervalAsync(500);
-      } catch {
-        /* best-effort on web */
-      }
-      try {
-        await sound.setVolumeAsync(currentVolume);
-      } catch {
-        /* best-effort */
-      }
-      await sound.playAsync();
+      sound.play();
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
-      if (nextNext) nextSound = await preloadNext(nextNext);
+      if (nextNext) nextSound = preloadNext(nextNext);
     } else {
-      await sound?.unloadAsync();
-      sound = await loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
+      sound?.remove();
+      sound = loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
     }
     set({ currentTrack: nextTrack, currentIndex: nextIndex, position: 0, duration: nextTrack.duration });
   },
 
-
   skipToPrevious: async () => {
     const { position, queue, currentIndex } = get();
     if (position > 3 && sound) {
-      await sound.setPositionAsync(0);
+      sound.seekTo(0);
       set({ position: 0 });
       return;
     }
     if (currentIndex <= 0) return;
     const prevTrack = queue[currentIndex - 1];
-    await sound?.unloadAsync();
-    await nextSound?.unloadAsync();
+    sound?.remove();
+    nextSound?.remove();
     nextSound = null;
-    sound = await loadAndPlay(prevTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
+    sound = loadAndPlay(prevTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
     set({ currentTrack: prevTrack, currentIndex: currentIndex - 1, position: 0, duration: prevTrack.duration });
   },
 
   playTrack: async (track, queue = []) => {
+    // Unload current and preloaded players so play() loads the new selection instead of resuming.
+    sound?.remove();
+    sound = null;
+    nextSound?.remove();
+    nextSound = null;
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;

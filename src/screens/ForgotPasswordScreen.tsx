@@ -6,13 +6,19 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
+import type { RootStackParamList } from '../navigation/types';
+
+type Nav = NativeStackNavigationProp<RootStackParamList, 'ForgotPassword'>;
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const { forgotPassword, isLoading } = useAuthStore();
-  const navigation = useNavigation();
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<RootStackParamList, 'ForgotPassword'>>();
+  const fromSettings = route.params?.fromSettings ?? false;
 
   const handleSubmit = async () => {
     if (!email.trim()) {
@@ -22,7 +28,7 @@ export default function ForgotPasswordScreen() {
     try {
       await forgotPassword(email.trim());
       Alert.alert('Check your email', 'If an account exists, you will receive a password reset code.', [
-        { text: 'OK', onPress: () => navigation.navigate('ResetPassword' as never, { email: email.trim() }) },
+        { text: 'OK', onPress: () => navigation.navigate('ResetPassword', { email: email.trim(), fromSettings }) },
       ]);
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Something went wrong');
@@ -54,7 +60,7 @@ export default function ForgotPasswordScreen() {
           Send reset code
         </Button>
         <Button mode="text" onPress={() => navigation.goBack()} disabled={isLoading}>
-          Back to sign in
+          {fromSettings ? 'Back' : 'Back to sign in'}
         </Button>
       </View>
     </KeyboardAvoidingView>

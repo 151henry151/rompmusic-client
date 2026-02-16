@@ -15,7 +15,7 @@ import ArtworkImage from '../components/ArtworkImage';
 import { groupArtistsByNormalizedName } from '../utils/artistMerge';
 
 type RootStackParamList = {
-  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
   AlbumDetail: { albumId: number; highlightTrackId?: number };
   TrackDetail: { trackId: number };
 };
@@ -73,12 +73,11 @@ export default function SearchScreen() {
             <List.Item
               key={`artist-${g.primaryId}`}
               title={g.displayName}
-              left={() => <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artwork} />}
+              left={() => <List.Icon icon="account" />}
               onPress={() =>
                 navigation.navigate('ArtistDetail', {
                   artistIds: g.artistIds,
                   artistName: g.displayName,
-                  isAssortedArtists: (g as { isAssortedArtists?: boolean }).isAssortedArtists,
                 })
               }
               right={(props) => <List.Icon {...props} icon="chevron-right" />}

@@ -39,7 +39,7 @@ export default function ArtistDetailScreen() {
   const albums = useMemo(() => {
     const seen = new Set<number>();
     const seenTitles = new Set<string>();
-    const out: { id: number; title: string; year?: number }[] = [];
+    const out: { id: number; title: string; year?: number; has_artwork?: boolean | null }[] = [];
     for (const q of albumQueries) {
       if (!q.data) continue;
       for (const a of q.data) {
@@ -71,7 +71,6 @@ export default function ArtistDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <ArtworkImage type="artist" id={primaryId} size={160} style={styles.artistArtwork} />
       <Text variant="headlineSmall" style={styles.header}>
         {artistName}
       </Text>
@@ -97,11 +96,7 @@ export default function ArtistDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  artistArtwork: {
-    alignSelf: 'center',
-    marginVertical: 24,
-  },
-  header: { paddingHorizontal: 16, color: '#fff' },
+  header: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 8, color: '#fff' },
   section: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, color: '#888' },
   item: { backgroundColor: '#1a1a1a' },
   albumArtwork: { marginRight: 12, alignSelf: 'center' },

@@ -9,7 +9,7 @@ import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 
-type ResetParams = { email: string };
+type ResetParams = { email: string; fromSettings?: boolean };
 type NavParams = { ResetPassword: ResetParams };
 
 export default function ResetPasswordScreen() {
@@ -19,6 +19,7 @@ export default function ResetPasswordScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<NavParams, 'ResetPassword'>>();
   const email = route.params?.email || '';
+  const fromSettings = route.params?.fromSettings ?? false;
 
   const handleSubmit = async () => {
     if (!code.trim()) {
@@ -31,8 +32,8 @@ export default function ResetPasswordScreen() {
     }
     try {
       await resetPassword(email, code.trim(), newPassword);
-      Alert.alert('Success', 'Password reset. You can now sign in.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login' as never) },
+      Alert.alert('Success', 'Password reset successfully.', [
+        { text: 'OK', onPress: () => navigation.navigate(fromSettings ? ('Settings' as never) : ('Login' as never)) },
       ]);
     } catch (e) {
       Alert.alert('Reset failed', e instanceof Error ? e.message : 'Invalid code or code expired');

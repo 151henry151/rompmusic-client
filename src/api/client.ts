@@ -3,7 +3,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+// On web, use full origin + /api/v1 so requests always hit the API (not resolved relative to /app/).
+// For native/SSR use env or default.
+const API_BASE =
+  typeof window !== 'undefined'
+    ? `${window.location.origin}/api/v1`
+    : (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api/v1');
 
 let token: string | null = null;
 
@@ -15,6 +20,16 @@ export function getToken() {
   return token;
 }
 
+/** Build query string, omitting undefined and empty string so we never send e.g. search=undefined */
+function toQueryString(params: Record<string, string | number | boolean | undefined>): string {
+  const filtered: Record<string, string> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') filtered[k] = String(v);
+  }
+  const q = new URLSearchParams(filtered).toString();
+  return q ? '?' + q : '';
+}
+
 async function fetchApi(path: string, opts: RequestInit = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
   const headers: HeadersInit = {
@@ -24,7 +39,7 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { ...opts, headers });
+  const res = await fetch(url, { ...opts, headers, cache: 'no-store' });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(err || `HTTP ${res.status}`);
@@ -88,22 +103,20 @@ export const api = {
     return fetchApi('/config/client') as Promise<{ client_settings: Record<string, { visible: boolean; default: boolean | string; allowed?: string[] }> }>;
   },
 
-  getArtworkUrl(type: 'album' | 'artist', id: number) {
+  getArtworkUrl(type: 'album', id: number) {
     return `${API_BASE.replace('/api/v1', '')}/api/v1/artwork/${type}/${id}`;
   },
 
   async getArtists(params?: { skip?: number; limit?: number; search?: string; home?: boolean; sort_by?: string; order?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi(`/library/artists${q ? '?' + q : ''}`);
+    return fetchApi(`/library/artists${params ? toQueryString(params) : ''}`);
   },
 
   async getArtist(id: number) {
     return fetchApi(`/library/artists/${id}`);
   },
 
-  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string; sort_by?: string; order?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi(`/library/albums${q ? '?' + q : ''}`);
+  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string; sort_by?: string; order?: string; random?: boolean }) {
+    return fetchApi(`/library/albums${params ? toQueryString(params) : ''}`);
   },
 
   async getAlbum(id: number) {
@@ -111,8 +124,7 @@ export const api = {
   },
 
   async getTracks(params?: { skip?: number; limit?: number; album_id?: number; artist_id?: number; search?: string; sort_by?: string; order?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi(`/library/tracks${q ? '?' + q : ''}`);
+    return fetchApi(`/library/tracks${params ? toQueryString(params) : ''}`);
   },
 
   async getRecentlyAdded(limit = 20) {
