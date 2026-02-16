@@ -55,6 +55,8 @@ interface PlayerState {
   clearQueue: () => void;
   autoplayEnabled: boolean;
   setAutoplay: (enabled: boolean) => void;
+  /** First queue index that was added by autoplay (similar tracks). null = no autoplay segment. */
+  autoplayStartIndex: number | null;
 }
 
 let sound: AudioPlayer | null = null;
@@ -80,9 +82,15 @@ function loadAndPlay(
   if (position > 0) {
     player.seekTo(position);
   }
+  let finished = false;
   player.addListener('playbackStatusUpdate', (status) => {
-    if (status.didJustFinish) onFinish();
-    else onPositionUpdate(status.currentTime);
+    onPositionUpdate(status.currentTime);
+    // didJustFinish can be unreliable on some platforms (e.g. web); also detect end by position
+    const atEnd = status.isLoaded && status.duration > 0 && status.currentTime >= Math.max(0, status.duration - 0.5) && !status.playing;
+    if (!finished && (status.didJustFinish || atEnd)) {
+      finished = true;
+      onFinish();
+    }
   });
   player.play();
   return player;
@@ -110,6 +118,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isLoading: false,
   error: null,
   autoplayEnabled: false,
+  autoplayStartIndex: null,
 
   setVolume: async (v: number) => {
     currentVolume = Math.max(0, Math.min(1, v));
@@ -118,7 +127,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0) => {
-    set({ queue: tracks, currentIndex: startIndex });
+    set({ queue: tracks, currentIndex: startIndex, autoplayStartIndex: null });
   },
 
   play: async () => {
@@ -177,7 +186,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
               disc_number: t.disc_number,
               duration: t.duration,
             }));
-            set((s) => ({ queue: [...s.queue, ...mapped] }));
+            const startIndex = get().queue.length;
+            set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
             queue = [...queue, ...mapped];
           }
         } catch {
@@ -202,9 +212,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       sound = nextSound;
       nextSound = null;
       sound.volume = currentVolume;
+      let finished = false;
       sound.addListener('playbackStatusUpdate', (status) => {
-        if (status.didJustFinish) get().skipToNext();
-        else set({ position: status.currentTime });
+        set({ position: status.currentTime });
+        const atEnd = status.isLoaded && status.duration > 0 && status.currentTime >= Math.max(0, status.duration - 0.5) && !status.playing;
+        if (!finished && (status.didJustFinish || atEnd)) {
+          finished = true;
+          get().skipToNext();
+        }
       });
       sound.play();
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
@@ -241,13 +256,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;
-    set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration });
+    set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration, autoplayStartIndex: null });
     await get().play();
   },
 
   addToQueue: (tracks) => {
     const arr = Array.isArray(tracks) ? tracks : [tracks];
-    set((s) => ({ queue: [...s.queue, ...arr] }));
+    set((s) => ({ queue: [...s.queue, ...arr], autoplayStartIndex: null }));
   },
 
   playNext: (tracks) => {
@@ -257,12 +272,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const insertAt = currentIndex + 1;
       const next = [...queue];
       next.splice(insertAt, 0, ...arr);
-      return { queue: next };
+      return { queue: next, autoplayStartIndex: null };
     });
   },
 
   clearQueue: () => {
-    set({ queue: [], currentIndex: 0, currentTrack: null });
+    set({ queue: [], currentIndex: 0, currentTrack: null, autoplayStartIndex: null });
   },
 
   setAutoplay: (enabled) => {
