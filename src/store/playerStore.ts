@@ -105,6 +105,46 @@ function preloadNext(track: Track): AudioPlayer | null {
   }
 }
 
+/** Update lock screen / Now Playing metadata (iOS/Android). No-op on web. */
+function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null): void {
+  if (!player) return;
+  const setActive = (player as { setActiveForLockScreen?(active: boolean, metadata?: Record<string, string>): void }).setActiveForLockScreen;
+  if (!setActive) return;
+  if (!track) {
+    setActive.call(player, false);
+    return;
+  }
+  setActive.call(player, true, {
+    title: track.title,
+    artist: track.artist_name || 'Unknown',
+    albumTitle: track.album_title,
+    artworkUrl: api.getArtworkUrl('album', track.album_id),
+  });
+}
+
+/** Call play() once the player is loaded; avoids silent no-op on some platforms when promoting preloaded track. */
+function playWhenLoaded(player: AudioPlayer): void {
+  const status = (player as { currentStatus?: { isLoaded?: boolean } }).currentStatus;
+  if (status?.isLoaded) {
+    player.play();
+    return;
+  }
+  let played = false;
+  const doPlay = () => {
+    if (played) return;
+    played = true;
+    player.play();
+  };
+  const timeout = setTimeout(doPlay, 5000);
+  const unsub = player.addListener('playbackStatusUpdate', (s: { isLoaded?: boolean }) => {
+    if (s.isLoaded) {
+      clearTimeout(timeout);
+      unsub?.remove?.();
+      doPlay();
+    }
+  });
+}
+
 let currentVolume = 1;
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -142,6 +182,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextIndex = currentIndex + 1;
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
         sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position);
+        setLockScreenMetadata(sound, currentTrack);
         if (nextTrack) nextSound = preloadNext(nextTrack);
       }
       set({ isPlaying: true, isLoading: false });
@@ -196,6 +237,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       const state = get();
       if (state.currentIndex + 1 >= state.queue.length) {
+        setLockScreenMetadata(sound ?? null, null);
         sound?.remove();
         nextSound?.remove();
         sound = null;
@@ -221,12 +263,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           get().skipToNext();
         }
       });
-      sound.play();
+      playWhenLoaded(sound);
+      setLockScreenMetadata(sound, nextTrack);
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
       if (nextNext) nextSound = preloadNext(nextNext);
     } else {
       sound?.remove();
       sound = loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
+      setLockScreenMetadata(sound, nextTrack);
     }
     set({ currentTrack: nextTrack, currentIndex: nextIndex, position: 0, duration: nextTrack.duration });
   },
@@ -244,6 +288,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     nextSound?.remove();
     nextSound = null;
     sound = loadAndPlay(prevTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
+    setLockScreenMetadata(sound, prevTrack);
     set({ currentTrack: prevTrack, currentIndex: currentIndex - 1, position: 0, duration: prevTrack.duration });
   },
 
