@@ -17,11 +17,14 @@ export interface ClientConfigPolicy {
 export interface SettingsState {
   /** Group artists that differ only by capitalization (e.g. "John Coltrane" and "John coltrane"). Default: true */
   groupArtistsByCapitalization: boolean;
+  /** Put albums with artwork first (no-art albums at bottom). Default: true */
+  albumsArtworkFirst: boolean;
   /** Stream format: original file or OGG transcoded. Default: original */
   streamFormat: StreamFormat;
   /** Server policy for client settings (visibility, defaults). Fetched on login. */
   clientConfig: ClientConfigPolicy | null;
   setGroupArtistsByCapitalization: (value: boolean) => void;
+  setAlbumsArtworkFirst: (value: boolean) => void;
   setStreamFormat: (value: StreamFormat) => void;
   setClientConfig: (config: ClientConfigPolicy | null) => void;
   restoreSettings: () => Promise<void>;
@@ -31,11 +34,13 @@ export interface SettingsState {
   /** Effective value for a setting (respects server policy when hidden) */
   getEffectiveGroupArtistsByCapitalization: () => boolean;
   getEffectiveGroupCollaborationsByPrimary: () => boolean;
+  getEffectiveAlbumsArtworkFirst: () => boolean;
   getEffectiveStreamFormat: () => StreamFormat;
 }
 
 const defaults = {
   groupArtistsByCapitalization: true,
+  albumsArtworkFirst: true,
   streamFormat: 'original' as StreamFormat,
 };
 
@@ -48,6 +53,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     AsyncStorage.setItem(
       SETTINGS_KEY,
       JSON.stringify({ ...get(), groupArtistsByCapitalization: value })
+    ).catch(() => {});
+  },
+
+  setAlbumsArtworkFirst: (value) => {
+    set({ albumsArtworkFirst: value });
+    AsyncStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ ...get(), albumsArtworkFirst: value })
     ).catch(() => {});
   },
 
@@ -68,6 +81,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const parsed = JSON.parse(raw);
         set({
           groupArtistsByCapitalization: parsed.groupArtistsByCapitalization ?? defaults.groupArtistsByCapitalization,
+          albumsArtworkFirst: parsed.albumsArtworkFirst ?? defaults.albumsArtworkFirst,
           streamFormat: (parsed.streamFormat === 'ogg' ? 'ogg' : 'original') as StreamFormat,
         });
       }
@@ -101,6 +115,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const { clientConfig } = get();
     const policy = clientConfig?.client_settings?.group_collaborations_by_primary;
     return policy ? !!policy.default : true;
+  },
+  getEffectiveAlbumsArtworkFirst: () => {
+    const { clientConfig, albumsArtworkFirst } = get();
+    const policy = clientConfig?.client_settings?.albums_artwork_first;
+    if (policy && !policy.visible) return !!policy.default;
+    return albumsArtworkFirst;
   },
   getEffectiveStreamFormat: () => {
     const { clientConfig, streamFormat } = get();

@@ -18,6 +18,8 @@ export default function SettingsScreen() {
   const restoreSettings = useSettingsStore((s) => s.restoreSettings);
   const groupArtistsByCapitalization = useSettingsStore((s) => s.groupArtistsByCapitalization);
   const setGroupArtistsByCapitalization = useSettingsStore((s) => s.setGroupArtistsByCapitalization);
+  const albumsArtworkFirst = useSettingsStore((s) => s.albumsArtworkFirst);
+  const setAlbumsArtworkFirst = useSettingsStore((s) => s.setAlbumsArtworkFirst);
   const streamFormat = useSettingsStore((s) => s.getEffectiveStreamFormat());
   const setStreamFormat = useSettingsStore((s) => s.setStreamFormat);
   const isSettingVisible = useSettingsStore((s) => s.isSettingVisible);
@@ -48,6 +50,21 @@ export default function SettingsScreen() {
             <Switch
               value={groupArtistsByCapitalization}
               onValueChange={setGroupArtistsByCapitalization}
+              color="#4a9eff"
+            />
+          )}
+          style={styles.item}
+        />
+      )}
+      {isSettingVisible('albums_artwork_first') && (
+        <List.Item
+          title="Put albums with artwork first"
+          description="Show albums that have cover art at the top; albums without art appear at the bottom. Default: on."
+          left={() => <List.Icon icon="album" />}
+          right={() => (
+            <Switch
+              value={albumsArtworkFirst}
+              onValueChange={setAlbumsArtworkFirst}
               color="#4a9eff"
             />
           )}
@@ -110,7 +127,7 @@ export default function SettingsScreen() {
       </Text>
       <List.Item
         title="About"
-        description="RompMusic 0.1.0-beta.1"
+        description="RompMusic 0.1.0-beta.3"
         left={() => <List.Icon icon="information" />}
         right={(props) => <List.Icon {...props} icon="chevron-right" />}
         onPress={() => setAboutVisible(true)}
@@ -141,7 +158,7 @@ export default function SettingsScreen() {
           <Dialog.Title>About RompMusic</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium" style={styles.dialogText}>
-              RompMusic 0.1.0-beta.1{'\n\n'}
+              RompMusic 0.1.0-beta.3{'\n\n'}
               Libre music streaming. Free as in freedom.{'\n\n'}
               Licensed under GPL-3.0. Use, study, modify, and share. Self-hosted — your music stays on your server. No tracking, no ads.
             </Text>

@@ -1,6 +1,6 @@
 {
   "name": "rompmusic-client",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.3",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

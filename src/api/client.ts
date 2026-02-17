@@ -115,7 +115,7 @@ export const api = {
     return fetchApi(`/library/artists/${id}`);
   },
 
-  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string; sort_by?: string; order?: string; random?: boolean }) {
+  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string; sort_by?: string; order?: string; random?: boolean; artwork_first?: boolean }) {
     return fetchApi(`/library/albums${params ? toQueryString(params) : ''}`);
   },
 
@@ -155,8 +155,8 @@ export const api = {
     return fetchApi(`/library/tracks/${id}`);
   },
 
-  async search(q: string) {
-    return fetchApi(`/search?q=${encodeURIComponent(q)}`);
+  async search(q: string, limit = 20) {
+    return fetchApi(`/search?q=${encodeURIComponent(q)}&limit=${Math.min(50, Math.max(1, limit))}`);
   },
 
   async getPlaylists() {
