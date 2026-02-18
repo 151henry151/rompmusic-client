@@ -51,13 +51,6 @@ const ALBUM_SORTS = [
   { value: 'title', label: 'Album title' },
 ];
 
-const TRACK_SORTS = [
-  { value: 'year', label: 'Date released' },
-  { value: 'date_added', label: 'Date added' },
-  { value: 'artist', label: 'Artist name' },
-  { value: 'album', label: 'Album title' },
-  { value: 'title', label: 'Track title' },
-];
 
 function getDecade(year: number | null | undefined): string {
   if (year == null) return 'Unknown';
@@ -101,7 +94,7 @@ function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { let
   return letters.map((letter) => ({ letter, items: groups.get(letter)! }));
 }
 
-type TabType = 'artists' | 'albums' | 'songs';
+type TabType = 'artists' | 'albums';
 
 function SectionIndex({
   sectionKeys,
@@ -171,7 +164,7 @@ const sectionIndexStyles = StyleSheet.create({
 
 export default function LibraryScreen() {
   const [tab, setTab] = useState<TabType>('albums');
-  const [sortBy, setSortBy] = useState({ artists: 'name', albums: 'title', songs: 'title' });
+  const [sortBy, setSortBy] = useState({ artists: 'name', albums: 'title' });
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [tabMenuVisible, setTabMenuVisible] = useState(false);
@@ -204,9 +197,9 @@ export default function LibraryScreen() {
   const cardsPerRow = isMobile ? 3 : 5;
   const cardWidth = Math.max(100, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
-  const currentSortBy = tab === 'artists' ? sortBy.artists : tab === 'albums' ? sortBy.albums : sortBy.songs;
-  const sortOptions = tab === 'artists' ? ARTIST_SORTS : tab === 'albums' ? ALBUM_SORTS : TRACK_SORTS;
-  const tabLabel = tab === 'albums' ? 'Albums' : tab === 'artists' ? 'Artists' : 'Songs';
+  const currentSortBy = tab === 'artists' ? sortBy.artists : sortBy.albums;
+  const sortOptions = tab === 'artists' ? ARTIST_SORTS : ALBUM_SORTS;
+  const tabLabel = tab === 'albums' ? 'Albums' : 'Artists';
 
   const {
     data: artistsData,
@@ -228,6 +221,7 @@ export default function LibraryScreen() {
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       (lastPage as unknown[]).length === LIBRARY_ARTISTS_PAGE_SIZE ? allPages.length * LIBRARY_ARTISTS_PAGE_SIZE : undefined,
+    enabled: !searchQuery,
   });
   const artistsRaw = useMemo(() => artistsData?.pages.flat() ?? [], [artistsData?.pages]);
   const { groupedArtists } = useMemo(() => {
@@ -267,34 +261,20 @@ export default function LibraryScreen() {
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       (lastPage as unknown[]).length === LIBRARY_ALBUMS_PAGE_SIZE ? allPages.length * LIBRARY_ALBUMS_PAGE_SIZE : undefined,
+    enabled: !searchQuery,
   });
   const albumsRaw = albumsData?.pages.flat() ?? [];
   const albums = albumsRaw;
   const albumGroups = useMemo(() => {
     return groupCollaborationsByPrimary ? groupAlbumsWithCollab(albums) : groupAlbums(albums);
   }, [albums, groupCollaborationsByPrimary]);
-  const {
-    data: tracksData,
-    isLoading: tracksLoading,
-    error: tracksError,
-    fetchNextPage: fetchMoreTracks,
-    hasNextPage: hasMoreTracks,
-    isFetchingNextPage: tracksLoadingMore,
-  } = useInfiniteQuery({
-    queryKey: ['tracks', sortBy.songs, order, searchQuery],
-    queryFn: ({ pageParam }) =>
-      api.getTracks({
-        skip: pageParam,
-        limit: LIBRARY_TRACKS_PAGE_SIZE,
-        sort_by: sortBy.songs,
-        order,
-        search: searchQuery || undefined,
-      }),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      (lastPage as unknown[]).length === LIBRARY_TRACKS_PAGE_SIZE ? allPages.length * LIBRARY_TRACKS_PAGE_SIZE : undefined,
+  const { data: searchResultsData, isLoading: searchResultsLoading } = useQuery({
+    queryKey: ['search-results', searchQuery],
+    queryFn: () => api.search(searchQuery.trim(), 50),
+    enabled: searchQuery.trim().length >= 1,
+    staleTime: 60 * 1000,
   });
-  const tracks = tracksData?.pages.flat() ?? [];
+  const searchResults = searchResultsData ?? { artists: [], albums: [], tracks: [] };
 
   useEffect(() => {
     if (searchQuery) return;
@@ -304,30 +284,21 @@ export default function LibraryScreen() {
     if (searchQuery) return;
     if (hasMoreAlbums && !albumsLoadingMore && !albumsLoading) fetchMoreAlbums();
   }, [searchQuery, hasMoreAlbums, albumsLoadingMore, albumsLoading, fetchMoreAlbums]);
-  useEffect(() => {
-    if (searchQuery) return;
-    if (hasMoreTracks && !tracksLoadingMore && !tracksLoading) fetchMoreTracks();
-  }, [searchQuery, hasMoreTracks, tracksLoadingMore, tracksLoading, fetchMoreTracks]);
 
-  const anyLoading = artistsLoading || albumsLoading || tracksLoading;
-  const anyError = artistsError || albumsError || tracksError;
+  const anyLoading = searchQuery ? searchResultsLoading : (artistsLoading || albumsLoading);
+  const anyError = searchQuery ? false : (artistsError || albumsError);
   const allSettledEmpty =
+    !searchQuery &&
     !anyLoading &&
     !anyError &&
     (groupedArtists?.length ?? 0) === 0 &&
-    albumGroups.length === 0 &&
-    (tracks || []).length === 0;
+    albumGroups.length === 0;
 
   const albumsGroupedByDecade = useMemo(() => {
     if (sortBy.albums !== 'year') return null;
     const groupsWithYear = albumGroups.map((g) => ({ ...g, year: g.primaryAlbum.year }));
     return groupByDecade(groupsWithYear);
   }, [albumGroups, sortBy.albums]);
-
-  const tracksGroupedByDecade = useMemo(() => {
-    if (sortBy.songs !== 'year') return null;
-    return groupByDecade(tracks || []);
-  }, [tracks, sortBy.songs]);
 
   const scrollViewRef = useRef<ScrollView | null>(null);
   const scrollableNodeRef = useRef<HTMLElement | null>(null);
@@ -387,24 +358,6 @@ export default function LibraryScreen() {
       sortBy.albums === 'artist' ? (g) => g.artistNames : (g) => g.displayTitle
     );
   }, [albumGroups, sortBy.albums]);
-  const getTrackLabel = useCallback(
-    (t: Track & { album_title?: string; artist_name?: string }) => {
-      switch (sortBy.songs) {
-        case 'artist':
-          return t.artist_name ?? '';
-        case 'album':
-          return t.album_title ?? '';
-        default:
-          return t.title;
-      }
-    },
-    [sortBy.songs]
-  );
-  const tracksByLetter = useMemo(() => {
-    if (sortBy.songs === 'year') return null;
-    return groupByFirstLetter(tracks as (Track & { album_title?: string; artist_name?: string })[], getTrackLabel);
-  }, [tracks, sortBy.songs, getTrackLabel]);
-
   const sectionKeys = useMemo(() => {
     if (tab === 'artists') return FULL_ALPHABET;
     if (tab === 'albums') {
@@ -412,12 +365,8 @@ export default function LibraryScreen() {
       if (albumsGroupedByDecade) return DECADE_LABELS;
       return FULL_ALPHABET;
     }
-    if (tab === 'songs') {
-      if (tracksGroupedByDecade) return DECADE_LABELS;
-      return FULL_ALPHABET;
-    }
     return [];
-  }, [tab, sortBy.albums, albumsGroupedByDecade, tracksGroupedByDecade]);
+  }, [tab, sortBy.albums, albumsGroupedByDecade]);
 
   useEffect(() => {
     sectionOffsetsRef.current = {};
@@ -427,13 +376,9 @@ export default function LibraryScreen() {
   const hasSectionInData =
     tab === 'artists'
       ? artistsByLetter.some((s) => s.letter === targetSectionToScroll)
-      : tab === 'albums'
-        ? (albumsGroupedByDecade?.some((g) => g.decade === targetSectionToScroll)) ??
-          (albumsByLetter?.some((s) => s.letter === targetSectionToScroll)) ??
-          false
-        : (tracksGroupedByDecade?.some((g) => g.decade === targetSectionToScroll)) ??
-          (tracksByLetter?.some((s) => s.letter === targetSectionToScroll)) ??
-          false;
+      : (albumsGroupedByDecade?.some((g) => g.decade === targetSectionToScroll)) ??
+        (albumsByLetter?.some((s) => s.letter === targetSectionToScroll)) ??
+        false;
 
   const getSectionScrollY = useCallback((key: string): number | undefined => {
     const fromMeasure = sectionOffsetsRef.current[key];
@@ -485,13 +430,12 @@ export default function LibraryScreen() {
       setTargetSectionToScroll(null);
       return;
     }
-    const hasMore = tab === 'artists' ? hasMoreArtists : tab === 'albums' ? hasMoreAlbums : hasMoreTracks;
-    const loading = tab === 'artists' ? artistsLoadingMore : tab === 'albums' ? albumsLoadingMore : tracksLoadingMore;
+    const hasMore = tab === 'artists' ? hasMoreArtists : hasMoreAlbums;
+    const loading = tab === 'artists' ? artistsLoadingMore : albumsLoadingMore;
     if (hasMore && !loading) {
       sectionJumpFetchCountRef.current += 1;
       if (tab === 'artists') fetchMoreArtists();
-      else if (tab === 'albums') fetchMoreAlbums();
-      else fetchMoreTracks();
+      else fetchMoreAlbums();
     } else if (!hasMore) {
       setTargetSectionToScroll(null);
     }
@@ -502,13 +446,10 @@ export default function LibraryScreen() {
     tab,
     hasMoreArtists,
     hasMoreAlbums,
-    hasMoreTracks,
     artistsLoadingMore,
     albumsLoadingMore,
-    tracksLoadingMore,
     fetchMoreArtists,
     fetchMoreAlbums,
-    fetchMoreTracks,
   ]);
 
   const handleSectionPress = useCallback(
@@ -581,7 +522,6 @@ export default function LibraryScreen() {
       if (nearBottom) {
         if (tab === 'artists' && hasMoreArtists && !artistsLoadingMore) fetchMoreArtists();
         else if (tab === 'albums' && hasMoreAlbums && !albumsLoadingMore) fetchMoreAlbums();
-        else if (tab === 'songs' && hasMoreTracks && !tracksLoadingMore) fetchMoreTracks();
       }
     },
     [
@@ -590,13 +530,10 @@ export default function LibraryScreen() {
       tab,
       hasMoreArtists,
       hasMoreAlbums,
-      hasMoreTracks,
       artistsLoadingMore,
       albumsLoadingMore,
-      tracksLoadingMore,
       fetchMoreArtists,
       fetchMoreAlbums,
-      fetchMoreTracks,
     ]
   );
 
@@ -612,7 +549,7 @@ export default function LibraryScreen() {
     playTrack(track, queue || []);
   };
 
-  const hasSuggestions = suggestionData && debouncedSuggestQuery.length >= 2;
+  const hasSuggestions = !searchQuery && suggestionData && debouncedSuggestQuery.length >= 2;
   const showSuggestions = hasSuggestions && (suggestionData.artists?.length > 0 || suggestionData.albums?.length > 0 || suggestionData.tracks?.length > 0);
   const clearSearchAndNavigate = (fn: () => void) => {
     setSearchInput('');
@@ -641,7 +578,6 @@ export default function LibraryScreen() {
     >
       <Menu.Item onPress={() => { setTab('albums'); setTabMenuVisible(false); }} title="Albums" leadingIcon="album" />
       <Menu.Item onPress={() => { setTab('artists'); setTabMenuVisible(false); }} title="Artists" leadingIcon="account" />
-      <Menu.Item onPress={() => { setTab('songs'); setTabMenuVisible(false); }} title="Songs" leadingIcon="music" />
     </Menu>
   );
 
@@ -664,8 +600,7 @@ export default function LibraryScreen() {
           key={opt.value}
           onPress={() => {
             if (tab === 'artists') setSortBy((s) => ({ ...s, artists: opt.value }));
-            else if (tab === 'albums') setSortBy((s) => ({ ...s, albums: opt.value }));
-            else setSortBy((s) => ({ ...s, songs: opt.value }));
+            else setSortBy((s) => ({ ...s, albums: opt.value }));
             setSortMenuVisible(false);
           }}
           title={opt.label}
@@ -725,7 +660,7 @@ export default function LibraryScreen() {
 
   const renderTrackListRow = (
     t: { id: number; title: string; artist_name?: string; artist_id?: number; album_id: number; album_title?: string },
-    list: typeof tracks
+    list: (Track & { album_title?: string; artist_name?: string })[]
   ) => (
     <List.Item
       key={t.id}
@@ -880,22 +815,24 @@ export default function LibraryScreen() {
           contentContainerStyle={{ paddingBottom: 24 }}
         >
           <View ref={scrollContentRef} collapsable={false}>
-      {anyLoading && artistsRaw.length === 0 && albumsRaw.length === 0 && tracks.length === 0 && (
+      {anyLoading && (searchQuery ? true : artistsRaw.length === 0 && albumsRaw.length === 0) && (
         <View style={styles.loadingWrap}>
-          <Text variant="bodyLarge" style={styles.loadingText}>Loading library…</Text>
+          <Text variant="bodyLarge" style={styles.loadingText}>
+            {searchQuery ? 'Searching…' : 'Loading library…'}
+          </Text>
         </View>
       )}
-      {anyError && artistsRaw.length === 0 && albumsRaw.length === 0 && tracks.length === 0 && (
+      {anyError && !searchQuery && artistsRaw.length === 0 && albumsRaw.length === 0 && (
         <View style={styles.loadingWrap}>
           <Text variant="bodyLarge" style={styles.errorText}>
             Failed to load: {(() => {
-              const err = artistsError || albumsError || tracksError;
+              const err = artistsError || albumsError;
               return err instanceof Error ? err.message : String(err);
             })()}
           </Text>
         </View>
       )}
-      {allSettledEmpty && !showSuggestions && (
+      {allSettledEmpty && !showSuggestions && !searchQuery && (
         <View style={styles.loadingWrap}>
           <Text variant="bodyLarge" style={styles.loadingText}>
             No library items. Log in to the server dashboard and run a library scan to import your music.
@@ -936,7 +873,80 @@ export default function LibraryScreen() {
           ))}
         </View>
       )}
-      {tab === 'artists' && (
+      {searchQuery && !searchResultsLoading && (
+        <View style={styles.searchResultsSection}>
+          {(searchResults.artists?.length ?? 0) === 0 &&
+           (searchResults.albums?.length ?? 0) === 0 &&
+           (searchResults.tracks?.length ?? 0) === 0 ? (
+            <View style={styles.loadingWrap}>
+              <Text variant="bodyLarge" style={styles.loadingText}>No results for “{searchQuery}”</Text>
+            </View>
+          ) : (
+            <>
+              {(searchResults.artists?.length ?? 0) > 0 && (
+                <>
+                  <Text variant="labelLarge" style={styles.searchResultsSectionTitle}>Artists</Text>
+                  {(searchResults.artists || []).map((a: { id: number; name: string }) => (
+                    <List.Item
+                      key={`res-artist-${a.id}`}
+                      title={a.name}
+                      left={() => <List.Icon icon="account" />}
+                      onPress={() => clearSearchAndNavigate(() => navigation.navigate('ArtistDetail', { artistIds: [a.id], artistName: a.name }))}
+                      right={(props) => <List.Icon {...props} icon="chevron-right" />}
+                      style={styles.searchResultItem}
+                    />
+                  ))}
+                </>
+              )}
+              {(searchResults.albums?.length ?? 0) > 0 && (
+                <>
+                  <Text variant="labelLarge" style={styles.searchResultsSectionTitle}>Albums</Text>
+                  {(searchResults.albums || []).map((a: { id: number; title: string; artist_name?: string }) => (
+                    <List.Item
+                      key={`res-album-${a.id}`}
+                      title={a.title}
+                      description={a.artist_name}
+                      left={() => <ArtworkImage type="album" id={a.id} size={48} borderRadius={6} style={styles.searchResultArtwork} defer />}
+                      onPress={() => clearSearchAndNavigate(() => navigation.navigate('AlbumDetail', { albumId: a.id }))}
+                      right={(props) => <List.Icon {...props} icon="chevron-right" />}
+                      style={styles.searchResultItem}
+                    />
+                  ))}
+                </>
+              )}
+              {(searchResults.tracks?.length ?? 0) > 0 && (
+                <>
+                  <Text variant="labelLarge" style={styles.searchResultsSectionTitle}>Songs</Text>
+                  {(searchResults.tracks || []).map((t: { id: number; title: string; artist_name?: string; album_id: number; album_title?: string }) => (
+                    <List.Item
+                      key={`res-track-${t.id}`}
+                      title={t.title}
+                      description={`${t.artist_name ?? 'Unknown'} • ${t.album_title ?? 'Unknown'}`}
+                      left={() => (
+                        <TouchableOpacity
+                          onPress={(e) => { e.stopPropagation(); handleTrackPlay(t as any, searchResults.tracks || []); }}
+                          style={styles.trackListArtworkWrap}
+                          activeOpacity={0.8}
+                        >
+                          <ArtworkImage type="album" id={t.album_id} size={48} borderRadius={6} style={styles.trackListArtwork} defer />
+                          <View style={styles.trackListPlayOverlay} pointerEvents="none">
+                            <IconButton icon="play" size={24} iconColor="#fff" />
+                          </View>
+                        </TouchableOpacity>
+                      )}
+                      onPress={() => clearSearchAndNavigate(() => (navigation as any).navigate('TrackDetail', { trackId: t.id }))}
+                      style={styles.trackListItem}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Play ${t.title}`}
+                    />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+        </View>
+      )}
+      {!searchQuery && tab === 'artists' && (
         <View style={styles.artistsList} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
           {sectionKeys.map((key) => {
             const items = artistsByLetter.find((s) => s.letter === key)?.items ?? [];
@@ -964,7 +974,7 @@ export default function LibraryScreen() {
         </View>
       )}
 
-      {tab === 'albums' && (
+      {!searchQuery && tab === 'albums' && (
         <>
           <View style={styles.sectionListContent} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
             {sectionKeys.length === 0 ? (
@@ -1009,47 +1019,9 @@ export default function LibraryScreen() {
         </>
       )}
 
-      {tab === 'songs' && (
-        <>
-          <View style={styles.sectionListContent} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
-            {sectionKeys.map((key) => {
-              const items = tracksGroupedByDecade
-                ? (tracksGroupedByDecade.find((g) => g.decade === key)?.items ?? []) as (Track & { album_title?: string; artist_name?: string })[]
-                : (tracksByLetter?.find((s) => s.letter === key)?.items ?? []) as (Track & { album_title?: string; artist_name?: string })[];
-              const loading = targetSectionToScroll === key && items.length === 0;
-              return (
-                <React.Fragment key={key}>
-                  {renderSectionHeader(key, items.length > 0 || loading)}
-                  {items.length > 0 ? (
-                    <View style={[styles.songsList, styles.sectionBlock]}>
-                      {items.map((t) => renderTrackListRow(t, items))}
-                    </View>
-                  ) : loading ? (
-                    <View style={styles.loadingSectionPlaceholder}>
-                      <ActivityIndicator size="small" color="#4a9eff" style={styles.loadingSectionSpinner} />
-                      <View style={styles.skeletonList}>
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <View key={i} style={styles.skeletonListRow} />
-                        ))}
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={styles.sectionEmpty} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </View>
-          {tracksLoadingMore && (
-            <View style={styles.loadingMoreRow}>
-              <Text variant="bodySmall" style={styles.loadingText}>Loading…</Text>
-            </View>
-          )}
-        </>
-      )}
           </View>
         </ScrollView>
-        {sectionKeys.length > 0 && !showSuggestions && (
+        {!searchQuery && sectionKeys.length > 0 && !showSuggestions && (
           <SectionIndex
             sectionKeys={sectionKeys}
             currentSection={currentSection}
@@ -1200,6 +1172,21 @@ const styles = StyleSheet.create({
   },
   suggestionArtwork: {
     marginRight: 8,
+  },
+  searchResultsSection: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: 24,
+  },
+  searchResultsSectionTitle: {
+    color: '#888',
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  searchResultItem: {
+    backgroundColor: '#1a1a1a',
+  },
+  searchResultArtwork: {
+    marginRight: 12,
   },
   artistListItem: {
     backgroundColor: '#1a1a1a',

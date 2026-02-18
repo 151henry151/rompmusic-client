@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -51,6 +52,12 @@ function AppContent() {
     restoreSession();
     restoreSettings();
   }, [restoreSession, restoreSettings]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.title = 'ROMPMUSIC';
+    }
+  }, []);
 
   return <AppNavigator />;
 }
