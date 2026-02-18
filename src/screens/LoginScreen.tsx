@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Image, Pressable } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -40,7 +40,20 @@ export default function LoginScreen() {
     >
       <View style={styles.box}>
         <View style={styles.logoWrap}>
-          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="RompMusic logo" />
+          <Pressable
+            onPress={() => {
+              if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                const base = window.location.pathname.split('/')[1] || 'app';
+                window.location.href = `${window.location.origin}/${base}`;
+              } else {
+                (navigation as any).navigate('App');
+              }
+            }}
+            accessibilityRole="link"
+            accessibilityLabel="RompMusic home"
+          >
+            <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="RompMusic logo" />
+          </Pressable>
         </View>
         <Text variant="headlineMedium" style={styles.title}>
           RompMusic
