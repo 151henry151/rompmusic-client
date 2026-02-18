@@ -96,12 +96,6 @@ export default function SettingsScreen() {
       <Text variant="titleSmall" style={styles.section}>
         Playback
       </Text>
-      <List.Item
-        title="Gapless playback"
-        description="Enabled • Albums play seamlessly with no gaps between tracks"
-        left={() => <List.Icon icon="music" />}
-        style={styles.item}
-      />
       {isSettingVisible('audio_format') && (
         <Menu
           visible={audioMenuVisible}
