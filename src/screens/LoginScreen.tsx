@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -39,6 +39,9 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <View style={styles.box}>
+        <View style={styles.logoWrap}>
+          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="RompMusic logo" />
+        </View>
         <Text variant="headlineMedium" style={styles.title}>
           RompMusic
         </Text>
@@ -113,6 +116,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
     padding: 24,
+  },
+  logoWrap: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  logo: {
+    width: 80,
+    height: 80,
   },
   title: {
     textAlign: 'center',
