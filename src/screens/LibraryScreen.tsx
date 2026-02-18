@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator } from 'react-native';
+import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, IconButton, Menu, Divider, List, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -756,6 +756,7 @@ export default function LibraryScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }]}>
+        <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="contain" accessibilityLabel="RompMusic" />
         <View style={styles.tabDropdownWrap}>
           {renderTabMenu()}
         </View>
@@ -1044,6 +1045,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#0a0a0a',
     flexShrink: 0,
+  },
+  headerLogo: {
+    width: 32,
+    height: 32,
+    marginLeft: 16,
   },
   scrollWrapper: {
     position: 'absolute',
