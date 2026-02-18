@@ -780,15 +780,27 @@ export default function LibraryScreen() {
           />
           {renderSortMenu()}
           {!user && (
-            <Button
-              mode="outlined"
-              compact
-              onPress={() => (navigation as any).navigate('Login')}
-              style={styles.signInButton}
-              labelStyle={styles.signInButtonLabel}
-            >
-              Sign in
-            </Button>
+            <View style={styles.authWrap}>
+              <Button
+                mode="text"
+                compact
+                onPress={() => (navigation as any).navigate('Login')}
+                textColor="#94a3b8"
+                style={styles.loginLink}
+                labelStyle={styles.loginLinkLabel}
+              >
+                Login
+              </Button>
+              <Button
+                mode="contained"
+                compact
+                onPress={() => (navigation as any).navigate('Register')}
+                style={styles.registerButton}
+                labelStyle={styles.registerButtonLabel}
+              >
+                Register
+              </Button>
+            </View>
           )}
           {user && (
             <IconButton
@@ -1089,11 +1101,24 @@ const styles = StyleSheet.create({
     minWidth: 0,
     backgroundColor: '#1a1a1a',
   },
-  signInButton: {
-    borderColor: '#444',
+  authWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  signInButtonLabel: {
+  loginLink: {
+    minWidth: 0,
+  },
+  loginLinkLabel: {
+    color: '#94a3b8',
+    fontSize: 14,
+  },
+  registerButton: {
+    backgroundColor: '#4a9eff',
+  },
+  registerButtonLabel: {
     color: '#fff',
+    fontSize: 14,
   },
   grid: {
     flexDirection: 'row',

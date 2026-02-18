@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { Platform } from 'react-native';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -131,8 +132,28 @@ export default function AppNavigator() {
 
   if (!isReady) return null;
 
+  const webBasePath = Platform.OS === 'web' && typeof window !== 'undefined'
+    ? (window.location.pathname.split('/')[1] || 'app')
+    : 'app';
+  const linking = Platform.OS === 'web' && typeof window !== 'undefined'
+    ? {
+        prefixes: [window.location.origin + '/' + webBasePath, '/' + webBasePath],
+        config: {
+          screens: {
+            App: '',
+            Login: 'login',
+            Register: 'register',
+            VerifyEmail: 'verify-email',
+            ForgotPassword: 'forgot-password',
+            ResetPassword: 'reset-password',
+          },
+        },
+      }
+    : undefined;
+
   return (
     <NavigationContainer
+      linking={linking}
       theme={{
         ...DarkTheme,
         colors: {
