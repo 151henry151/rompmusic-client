@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.0-beta.4] - 2026-02-16
+
+### Added
+
+- Favicon from project logo.
+
 ## [0.1.0-beta.3] - 2026-02-17
 
 ### Added
@@ -40,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Queue / "play next" bug: playing an album then choosing "play next" on another song could show the wrong track playing (second album track) while UI showed the "play next" song. Fixed by clearing preload and preloading the new next track when the queue changes.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.3...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.4...HEAD
+[0.1.0-beta.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.1
