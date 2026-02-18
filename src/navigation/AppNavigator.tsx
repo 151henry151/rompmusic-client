@@ -28,6 +28,7 @@ import { useAuthStore } from '../store/authStore';
 import { usePlayerStore, type Track } from '../store/playerStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { RootStackParamList, AppStackParamList } from './types';
+import { getWebBasePath } from '../utils/webBasePath';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
@@ -132,15 +133,24 @@ export default function AppNavigator() {
 
   if (!isReady) return null;
 
-  const webBasePath = Platform.OS === 'web' && typeof window !== 'undefined'
-    ? (window.location.pathname.split('/')[1] || 'app')
-    : 'app';
+  const webBasePath = Platform.OS === 'web' ? getWebBasePath() : 'app';
   const linking = Platform.OS === 'web' && typeof window !== 'undefined'
     ? {
         prefixes: [window.location.origin + '/' + webBasePath, '/' + webBasePath],
         config: {
           screens: {
-            App: '',
+            App: {
+              path: '',
+              screens: {
+                Library: '',
+                History: 'history',
+                Settings: 'settings',
+                ArtistDetail: 'artist/:artistIds',
+                AlbumDetail: 'album/:albumId',
+                TrackDetail: 'track/:trackId',
+                // ForgotPassword/ResetPassword exist at root too; omit here to avoid duplicate pattern
+              },
+            },
             Login: 'login',
             Register: 'register',
             VerifyEmail: 'verify-email',

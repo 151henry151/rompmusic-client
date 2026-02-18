@@ -56,6 +56,17 @@ export default function MiniPlayer({ onExpand }: Props) {
     <View style={styles.container}>
       {queuePanelOpen && (
         <View style={styles.queuePanel}>
+          <View style={styles.queueCloseRow}>
+            <TouchableOpacity
+              style={styles.chevronButton}
+              onPress={() => setQueuePanelOpen(false)}
+              accessibilityLabel="Close queue"
+              accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon source="chevron-down" size={20} color="#888" />
+            </TouchableOpacity>
+          </View>
           <ScrollView style={styles.queueScroll} contentContainerStyle={styles.queueScrollContent}>
             <Text variant="labelMedium" style={styles.queueSectionTitle}>
               Queue
@@ -103,17 +114,19 @@ export default function MiniPlayer({ onExpand }: Props) {
         </View>
       )}
 
-      <View style={styles.chevronRow}>
-        <TouchableOpacity
-          style={styles.chevronButton}
-          onPress={() => setQueuePanelOpen((o) => !o)}
-          accessibilityLabel="Queue"
-          accessibilityRole="button"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon source="chevron-up" size={20} color="#888" />
-        </TouchableOpacity>
-      </View>
+      {!queuePanelOpen && (
+        <View style={styles.chevronRow}>
+          <TouchableOpacity
+            style={styles.chevronButton}
+            onPress={() => setQueuePanelOpen(true)}
+            accessibilityLabel="Queue"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon source="chevron-up" size={20} color="#888" />
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.barRow}>
         <TouchableOpacity
           style={styles.barTouchable}
@@ -203,6 +216,12 @@ const styles = StyleSheet.create({
     maxHeight: 320,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
+  },
+  queueCloseRow: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
   },
   queueScroll: {
     maxHeight: 320,

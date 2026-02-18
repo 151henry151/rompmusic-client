@@ -363,5 +363,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setAutoplay: (enabled) => {
     set({ autoplayEnabled: enabled });
+    if (!enabled) return;
+    const { currentTrack, queue, autoplayStartIndex } = get();
+    if (!currentTrack || autoplayStartIndex != null) return;
+    (async () => {
+      try {
+        const similar = await api.getSimilarTracks(currentTrack.id, 15);
+        if (similar?.length) {
+          const mapped = similar.map((t: { id: number; title: string; album_id: number; artist_id: number; album_title?: string; artist_name?: string; track_number: number; disc_number: number; duration: number }) => ({
+            id: t.id,
+            title: t.title,
+            album_id: t.album_id,
+            artist_id: t.artist_id,
+            album_title: t.album_title,
+            artist_name: t.artist_name,
+            track_number: t.track_number,
+            disc_number: t.disc_number,
+            duration: t.duration,
+          }));
+          const startIndex = get().queue.length;
+          set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
   },
 }));

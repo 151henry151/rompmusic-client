@@ -19,6 +19,7 @@ import { groupAlbums, groupAlbumsWithCollab } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAuthStore } from '../store/authStore';
 import type { AppStackParamList } from '../navigation/types';
+import { getWebBasePath } from '../utils/webBasePath';
 
 const CARD_GAP = 10;
 const HORIZONTAL_PADDING = 16;
@@ -759,8 +760,7 @@ export default function LibraryScreen() {
         <Pressable
           onPress={() => {
             if (Platform.OS === 'web' && typeof window !== 'undefined') {
-              const base = window.location.pathname.split('/')[1] || 'app';
-              window.location.href = `${window.location.origin}/${base}`;
+              window.location.href = `${window.location.origin}/${getWebBasePath()}`;
             } else {
               navigation.navigate('Library');
             }

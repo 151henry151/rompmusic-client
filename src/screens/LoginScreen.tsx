@@ -10,6 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import type { RootStackParamList } from '../navigation/types';
+import { getWebBasePath } from '../utils/webBasePath';
 
 type Props = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -43,8 +44,7 @@ export default function LoginScreen() {
           <Pressable
             onPress={() => {
               if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                const base = window.location.pathname.split('/')[1] || 'app';
-                window.location.href = `${window.location.origin}/${base}`;
+                window.location.href = `${window.location.origin}/${getWebBasePath()}`;
               } else {
                 (navigation as any).navigate('App');
               }
