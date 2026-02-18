@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { ScrollView, StyleSheet, View, TouchableOpacity, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, IconButton, Menu, Divider, List, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -24,8 +24,19 @@ const CARD_GAP = 10;
 const HORIZONTAL_PADDING = 16;
 const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
-/** Page size for paginated library lists (artists, albums, tracks) to avoid loading huge lists and crashing. */
-const LIBRARY_PAGE_SIZE = 50;
+/** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
+const LIBRARY_ARTISTS_PAGE_SIZE = 500;
+const LIBRARY_ALBUMS_PAGE_SIZE = 500;
+const LIBRARY_TRACKS_PAGE_SIZE = 1000;
+
+/** Full A–Z + # for the section index when sorted alphabetically (always show all letters). */
+const FULL_ALPHABET = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
+
+/** Decade labels for section index when sorted by date released (newest first). */
+const DECADE_LABELS = ['2020s', '2010s', '2000s', '1990s', '1980s', '1970s', '1960s', '1950s', 'Unknown'];
+
+/** DOM id prefix for library section headers (web: scrollIntoView / getBoundingClientRect). */
+const LIBRARY_SECTION_ID_PREFIX = 'library-section-';
 
 // Sort options per tab
 const ARTIST_SORTS = [
@@ -73,7 +84,90 @@ function groupByDecade<T extends { year?: number | null }>(items: T[]): { decade
   return result;
 }
 
+function firstLetterKey(s: string): string {
+  const trimmed = (s || '').trim();
+  const first = trimmed.charAt(0).toUpperCase();
+  return /[A-Z]/.test(first) ? first : '#';
+}
+
+function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { letter: string; items: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const letter = firstLetterKey(getLabel(item));
+    if (!groups.has(letter)) groups.set(letter, []);
+    groups.get(letter)!.push(item);
+  }
+  const letters = Array.from(groups.keys()).sort((a, b) => (a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b)));
+  return letters.map((letter) => ({ letter, items: groups.get(letter)! }));
+}
+
 type TabType = 'artists' | 'albums' | 'songs';
+
+function SectionIndex({
+  sectionKeys,
+  currentSection,
+  onSectionPress,
+  style,
+}: {
+  sectionKeys: string[];
+  currentSection: string | null;
+  onSectionPress: (key: string) => void;
+  style?: object;
+}) {
+  if (sectionKeys.length === 0) return null;
+  return (
+    <View style={[sectionIndexStyles.strip, style]} pointerEvents="box-none">
+      <View style={sectionIndexStyles.column}>
+        {sectionKeys.map((key) => {
+          const active = key === currentSection;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={() => onSectionPress(key)}
+              style={sectionIndexStyles.item}
+              accessibilityLabel={`Jump to ${key}`}
+              accessibilityRole="button"
+            >
+              <Text style={[sectionIndexStyles.label, active && sectionIndexStyles.labelActive]} numberOfLines={1}>
+                {key}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const sectionIndexStyles = StyleSheet.create({
+  strip: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  column: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  item: {
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  label: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+  },
+  labelActive: {
+    color: '#4a9eff',
+  },
+});
 
 export default function LibraryScreen() {
   const [tab, setTab] = useState<TabType>('albums');
@@ -126,14 +220,14 @@ export default function LibraryScreen() {
     queryFn: ({ pageParam }) =>
       api.getArtists({
         skip: pageParam,
-        limit: LIBRARY_PAGE_SIZE,
+        limit: LIBRARY_ARTISTS_PAGE_SIZE,
         sort_by: sortBy.artists,
         order,
         search: searchQuery || undefined,
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
-      (lastPage as unknown[]).length === LIBRARY_PAGE_SIZE ? allPages.length * LIBRARY_PAGE_SIZE : undefined,
+      (lastPage as unknown[]).length === LIBRARY_ARTISTS_PAGE_SIZE ? allPages.length * LIBRARY_ARTISTS_PAGE_SIZE : undefined,
   });
   const artistsRaw = useMemo(() => artistsData?.pages.flat() ?? [], [artistsData?.pages]);
   const { groupedArtists } = useMemo(() => {
@@ -164,7 +258,7 @@ export default function LibraryScreen() {
     queryFn: ({ pageParam }) =>
       api.getAlbums({
         skip: pageParam,
-        limit: LIBRARY_PAGE_SIZE,
+        limit: LIBRARY_ALBUMS_PAGE_SIZE,
         sort_by: sortBy.albums,
         order,
         search: searchQuery || undefined,
@@ -172,7 +266,7 @@ export default function LibraryScreen() {
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
-      (lastPage as unknown[]).length === LIBRARY_PAGE_SIZE ? allPages.length * LIBRARY_PAGE_SIZE : undefined,
+      (lastPage as unknown[]).length === LIBRARY_ALBUMS_PAGE_SIZE ? allPages.length * LIBRARY_ALBUMS_PAGE_SIZE : undefined,
   });
   const albumsRaw = albumsData?.pages.flat() ?? [];
   const albums = albumsRaw;
@@ -191,16 +285,29 @@ export default function LibraryScreen() {
     queryFn: ({ pageParam }) =>
       api.getTracks({
         skip: pageParam,
-        limit: LIBRARY_PAGE_SIZE,
+        limit: LIBRARY_TRACKS_PAGE_SIZE,
         sort_by: sortBy.songs,
         order,
         search: searchQuery || undefined,
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
-      (lastPage as unknown[]).length === LIBRARY_PAGE_SIZE ? allPages.length * LIBRARY_PAGE_SIZE : undefined,
+      (lastPage as unknown[]).length === LIBRARY_TRACKS_PAGE_SIZE ? allPages.length * LIBRARY_TRACKS_PAGE_SIZE : undefined,
   });
   const tracks = tracksData?.pages.flat() ?? [];
+
+  useEffect(() => {
+    if (searchQuery) return;
+    if (hasMoreArtists && !artistsLoadingMore && !artistsLoading) fetchMoreArtists();
+  }, [searchQuery, hasMoreArtists, artistsLoadingMore, artistsLoading, fetchMoreArtists]);
+  useEffect(() => {
+    if (searchQuery) return;
+    if (hasMoreAlbums && !albumsLoadingMore && !albumsLoading) fetchMoreAlbums();
+  }, [searchQuery, hasMoreAlbums, albumsLoadingMore, albumsLoading, fetchMoreAlbums]);
+  useEffect(() => {
+    if (searchQuery) return;
+    if (hasMoreTracks && !tracksLoadingMore && !tracksLoading) fetchMoreTracks();
+  }, [searchQuery, hasMoreTracks, tracksLoadingMore, tracksLoading, fetchMoreTracks]);
 
   const anyLoading = artistsLoading || albumsLoading || tracksLoading;
   const anyError = artistsError || albumsError || tracksError;
@@ -221,6 +328,277 @@ export default function LibraryScreen() {
     if (sortBy.songs !== 'year') return null;
     return groupByDecade(tracks || []);
   }, [tracks, sortBy.songs]);
+
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollableNodeRef = useRef<HTMLElement | null>(null);
+  const sectionOffsetsRef = useRef<Record<string, number>>({});
+  const listContentTopRef = useRef(0);
+  const scrollContentRef = useRef<View>(null);
+  const sectionHeaderRefsRef = useRef<Record<string, View | null>>({});
+  const targetSectionToScrollRef = useRef<string | null>(null);
+  const [currentSection, setCurrentSection] = useState<string | null>(null);
+  const [targetSectionToScroll, setTargetSectionToScroll] = useState<string | null>(null);
+  targetSectionToScrollRef.current = targetSectionToScroll;
+  const scrollToOffsetRef = useRef<(y: number) => void>(() => {});
+  const sectionJumpFetchCountRef = useRef(0);
+  const SECTION_JUMP_FETCH_LIMIT = 30;
+  const INFINITE_SCROLL_THRESHOLD = 400;
+
+  const scrollToOffset = useCallback((y: number) => {
+    const ref = scrollViewRef.current;
+    if (Platform.OS === 'web' && scrollableNodeRef.current) {
+      scrollableNodeRef.current.scrollTop = y;
+      return;
+    }
+    if (!ref) return;
+    if (typeof ref.scrollTo === 'function') {
+      ref.scrollTo({ y, animated: true });
+      return;
+    }
+    if (Platform.OS === 'web') {
+      const r = ref as unknown as { _scrollRef?: HTMLElement };
+      if (r._scrollRef && typeof r._scrollRef.scrollTop !== 'undefined') {
+        r._scrollRef.scrollTop = y;
+      }
+    }
+  }, []);
+  scrollToOffsetRef.current = scrollToOffset;
+
+  const setScrollViewRef = useCallback((r: ScrollView | null) => {
+    scrollViewRef.current = r;
+    if (Platform.OS === 'web' && r) {
+      const x = r as unknown as { getScrollableNode?: () => HTMLElement | null; _scrollRef?: HTMLElement; _nativeRef?: HTMLElement };
+      const node =
+        x.getScrollableNode?.() ??
+        (x._scrollRef && typeof (x._scrollRef as HTMLElement).scrollTop !== 'undefined' ? (x._scrollRef as HTMLElement) : null) ??
+        (x._nativeRef && typeof (x._nativeRef as HTMLElement).scrollTop !== 'undefined' ? (x._nativeRef as HTMLElement) : null) ??
+        null;
+      scrollableNodeRef.current = node;
+    } else {
+      scrollableNodeRef.current = null;
+    }
+  }, []);
+
+  const artistsByLetter = useMemo(() => groupByFirstLetter(groupedArtists, (g) => g.displayName), [groupedArtists]);
+  const albumsByLetter = useMemo(() => {
+    if (sortBy.albums === 'year' || sortBy.albums === 'date_added') return null;
+    return groupByFirstLetter(
+      albumGroups,
+      sortBy.albums === 'artist' ? (g) => g.artistNames : (g) => g.displayTitle
+    );
+  }, [albumGroups, sortBy.albums]);
+  const getTrackLabel = useCallback(
+    (t: Track & { album_title?: string; artist_name?: string }) => {
+      switch (sortBy.songs) {
+        case 'artist':
+          return t.artist_name ?? '';
+        case 'album':
+          return t.album_title ?? '';
+        default:
+          return t.title;
+      }
+    },
+    [sortBy.songs]
+  );
+  const tracksByLetter = useMemo(() => {
+    if (sortBy.songs === 'year') return null;
+    return groupByFirstLetter(tracks as (Track & { album_title?: string; artist_name?: string })[], getTrackLabel);
+  }, [tracks, sortBy.songs, getTrackLabel]);
+
+  const sectionKeys = useMemo(() => {
+    if (tab === 'artists') return FULL_ALPHABET;
+    if (tab === 'albums') {
+      if (sortBy.albums === 'date_added') return [];
+      if (albumsGroupedByDecade) return DECADE_LABELS;
+      return FULL_ALPHABET;
+    }
+    if (tab === 'songs') {
+      if (tracksGroupedByDecade) return DECADE_LABELS;
+      return FULL_ALPHABET;
+    }
+    return [];
+  }, [tab, sortBy.albums, albumsGroupedByDecade, tracksGroupedByDecade]);
+
+  useEffect(() => {
+    sectionOffsetsRef.current = {};
+    localSectionOffsetsRef.current = {};
+  }, [sectionKeys, tab]);
+
+  const hasSectionInData =
+    tab === 'artists'
+      ? artistsByLetter.some((s) => s.letter === targetSectionToScroll)
+      : tab === 'albums'
+        ? (albumsGroupedByDecade?.some((g) => g.decade === targetSectionToScroll)) ??
+          (albumsByLetter?.some((s) => s.letter === targetSectionToScroll)) ??
+          false
+        : (tracksGroupedByDecade?.some((g) => g.decade === targetSectionToScroll)) ??
+          (tracksByLetter?.some((s) => s.letter === targetSectionToScroll)) ??
+          false;
+
+  const getSectionScrollY = useCallback((key: string): number | undefined => {
+    const fromMeasure = sectionOffsetsRef.current[key];
+    if (fromMeasure != null) return fromMeasure;
+    const local = localSectionOffsetsRef.current[key];
+    if (local != null) return listContentTopRef.current + local;
+    return undefined;
+  }, []);
+
+  /** Native: scroll to section by measuring the section header ref (same idea as web scrollIntoView). */
+  const scrollToSectionByRef = useCallback(
+    (key: string) => {
+      const headerNode = sectionHeaderRefsRef.current[key];
+      const contentNode = scrollContentRef.current;
+      if (headerNode && contentNode && typeof (headerNode as any).measureLayout === 'function') {
+        (headerNode as any).measureLayout(contentNode, 0, 0, (_x: number, y: number) => {
+          scrollToOffset(y);
+        });
+        return true;
+      }
+      return false;
+    },
+    [scrollToOffset]
+  );
+
+  useEffect(() => {
+    if (!targetSectionToScroll) return;
+    if (hasSectionInData) {
+      const key = targetSectionToScroll;
+      if (Platform.OS === 'web') {
+        const id = `${LIBRARY_SECTION_ID_PREFIX}${key}`;
+        const tryScroll = () => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setTargetSectionToScroll(null);
+          }
+        };
+        requestAnimationFrame(() => setTimeout(tryScroll, 50));
+        return;
+      }
+      const tryScrollNative = () => {
+        if (scrollToSectionByRef(key)) setTargetSectionToScroll(null);
+      };
+      requestAnimationFrame(() => setTimeout(tryScrollNative, 100));
+      return;
+    }
+    if (sectionJumpFetchCountRef.current >= SECTION_JUMP_FETCH_LIMIT) {
+      setTargetSectionToScroll(null);
+      return;
+    }
+    const hasMore = tab === 'artists' ? hasMoreArtists : tab === 'albums' ? hasMoreAlbums : hasMoreTracks;
+    const loading = tab === 'artists' ? artistsLoadingMore : tab === 'albums' ? albumsLoadingMore : tracksLoadingMore;
+    if (hasMore && !loading) {
+      sectionJumpFetchCountRef.current += 1;
+      if (tab === 'artists') fetchMoreArtists();
+      else if (tab === 'albums') fetchMoreAlbums();
+      else fetchMoreTracks();
+    } else if (!hasMore) {
+      setTargetSectionToScroll(null);
+    }
+  }, [
+    targetSectionToScroll,
+    hasSectionInData,
+    scrollToSectionByRef,
+    tab,
+    hasMoreArtists,
+    hasMoreAlbums,
+    hasMoreTracks,
+    artistsLoadingMore,
+    albumsLoadingMore,
+    tracksLoadingMore,
+    fetchMoreArtists,
+    fetchMoreAlbums,
+    fetchMoreTracks,
+  ]);
+
+  const handleSectionPress = useCallback(
+    (key: string) => {
+      if (Platform.OS === 'web') {
+        const id = `${LIBRARY_SECTION_ID_PREFIX}${key}`;
+        const el = document.getElementById(id);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+        sectionJumpFetchCountRef.current = 0;
+        setTargetSectionToScroll(key);
+        return;
+      }
+      // Native: same behavior as web – locate section by ref and scroll to it (measure on tap)
+      if (scrollToSectionByRef(key)) return;
+      const idx = sectionKeys.indexOf(key);
+      for (let i = idx; i < sectionKeys.length; i++) {
+        if (scrollToSectionByRef(sectionKeys[i])) return;
+      }
+      sectionJumpFetchCountRef.current = 0;
+      setTargetSectionToScroll(key);
+    },
+    [sectionKeys, scrollToSectionByRef]
+  );
+
+  const contentAreaTop = 56 + insets.top;
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+
+      if (Platform.OS === 'web') {
+        // Highlight: which section header is at the top of the content area (DOM-based)
+        let found: string | null = null;
+        const threshold = contentAreaTop + 8;
+        for (let i = sectionKeys.length - 1; i >= 0; i--) {
+          const k = sectionKeys[i];
+          const el = document.getElementById(`${LIBRARY_SECTION_ID_PREFIX}${k}`);
+          if (el) {
+            const top = el.getBoundingClientRect().top;
+            if (top <= threshold) {
+              found = k;
+              break;
+            }
+          }
+        }
+        setCurrentSection(found ?? sectionKeys[0] ?? null);
+      } else {
+        const scrollY = contentOffset.y;
+        const keysByOffset = sectionKeys
+          .map((k) => ({ k, y: getSectionScrollY(k) }))
+          .filter((x): x is { k: string; y: number } => typeof x.y === 'number')
+          .sort((a, b) => a.y - b.y);
+        let found: string | null = null;
+        for (const { k, y } of keysByOffset) {
+          if (y <= scrollY) found = k;
+        }
+        setCurrentSection(found ?? keysByOffset[0]?.k ?? null);
+      }
+
+      const scrollY =
+        Platform.OS === 'web' && scrollableNodeRef.current != null
+          ? scrollableNodeRef.current.scrollTop
+          : contentOffset.y;
+      const nearBottom =
+        contentSize.height > 0 &&
+        scrollY + layoutMeasurement.height >= contentSize.height - INFINITE_SCROLL_THRESHOLD;
+      if (nearBottom) {
+        if (tab === 'artists' && hasMoreArtists && !artistsLoadingMore) fetchMoreArtists();
+        else if (tab === 'albums' && hasMoreAlbums && !albumsLoadingMore) fetchMoreAlbums();
+        else if (tab === 'songs' && hasMoreTracks && !tracksLoadingMore) fetchMoreTracks();
+      }
+    },
+    [
+      sectionKeys,
+      getSectionScrollY,
+      tab,
+      hasMoreArtists,
+      hasMoreAlbums,
+      hasMoreTracks,
+      artistsLoadingMore,
+      albumsLoadingMore,
+      tracksLoadingMore,
+      fetchMoreArtists,
+      fetchMoreAlbums,
+      fetchMoreTracks,
+    ]
+  );
 
   const handleAlbumPress = (group: { albumIds: number[] }) => {
     if (group.albumIds.length === 1) {
@@ -334,7 +712,7 @@ export default function LibraryScreen() {
       {g.usePlaceholderArtwork ? (
         <ArtworkPlaceholder size={cardWidth} style={[styles.cardArtwork, { borderRadius: CARD_RADIUS }]} />
       ) : (
-        <ArtworkImage type="album" id={g.primaryAlbum.id} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} />
+        <ArtworkImage type="album" id={g.primaryAlbum.id} size={cardWidth} borderRadius={CARD_RADIUS} style={styles.cardArtwork} defer />
       )}
       <Text variant="bodyMedium" numberOfLines={2} style={styles.cardTitle}>
         {g.displayTitle}
@@ -380,7 +758,7 @@ export default function LibraryScreen() {
           style={styles.trackListArtworkWrap}
           activeOpacity={0.8}
         >
-          <ArtworkImage type="album" id={t.album_id} size={48} borderRadius={6} style={styles.trackListArtwork} />
+          <ArtworkImage type="album" id={t.album_id} size={48} borderRadius={6} style={styles.trackListArtwork} defer />
           <View style={styles.trackListPlayOverlay} pointerEvents="none">
             <IconButton icon="play" size={24} iconColor="#fff" />
           </View>
@@ -393,23 +771,49 @@ export default function LibraryScreen() {
     />
   );
 
-  const renderAlbumSection = (title: string, items: unknown[], renderCard: (item: any, index: number, list?: any) => React.ReactElement) => (
-    <View style={styles.decadeSection} key={title}>
-      <Text variant="titleSmall" style={styles.decadeHeader}>
-        {title}
-      </Text>
-      <View style={styles.grid}>
-        {items.map((item, i) => renderCard(item, i, items))}
-      </View>
-    </View>
-  );
+  const localSectionOffsetsRef = useRef<Record<string, number>>({});
 
-  const renderSongsSection = (title: string, items: (Track & { album_title?: string; artist_name?: string })[]) => (
-    <View style={styles.decadeSection} key={title}>
-      <Text variant="titleSmall" style={styles.decadeHeader}>
-        {title}
-      </Text>
-      {items.map((t: Track & { album_title?: string; artist_name?: string }) => renderTrackListRow(t, items))}
+  const registerSectionOffset = useCallback((key: string, y: number, scrollContentRelative?: boolean) => {
+    if (scrollContentRelative) {
+      sectionOffsetsRef.current[key] = y;
+    } else {
+      localSectionOffsetsRef.current[key] = y;
+    }
+    // Scroll-to-section on tap/effect uses ref + measure (native) or scrollIntoView (web), not this
+  }, []);
+
+  const renderSectionHeader = (key: string, hasContentOrLoading: boolean) => (
+    <View
+      nativeID={`${LIBRARY_SECTION_ID_PREFIX}${key}`}
+      ref={(r) => {
+        if (r) sectionHeaderRefsRef.current[key] = r;
+      }}
+      onLayout={
+        Platform.OS === 'web'
+          ? undefined
+          : (e) => {
+              const localY = e.nativeEvent.layout.y;
+              registerSectionOffset(key, localY, false);
+              const headerNode = sectionHeaderRefsRef.current[key];
+              const contentNode = scrollContentRef.current;
+              if (headerNode && contentNode && typeof (headerNode as any).measureLayout === 'function') {
+                (headerNode as any).measureLayout(contentNode, 0, 0, (_x: number, y: number) => {
+                  sectionOffsetsRef.current[key] = y;
+                  if (key === targetSectionToScrollRef.current) scrollToOffsetRef.current(y);
+                });
+              }
+            }
+      }
+    >
+      {hasContentOrLoading ? (
+        <Text variant="titleSmall" style={styles.decadeHeader}>
+          {key}
+        </Text>
+      ) : (
+        <Text variant="titleSmall" style={[styles.decadeHeader, styles.sectionHeaderInvisible]} numberOfLines={1}>
+          {key}
+        </Text>
+      )}
     </View>
   );
 
@@ -469,9 +873,13 @@ export default function LibraryScreen() {
 
       <View style={[styles.scrollWrapper, { top: headerHeight }]}>
         <ScrollView
+          ref={setScrollViewRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={32}
           style={styles.scrollContent}
           contentContainerStyle={{ paddingBottom: 24 }}
         >
+          <View ref={scrollContentRef} collapsable={false}>
       {anyLoading && artistsRaw.length === 0 && albumsRaw.length === 0 && tracks.length === 0 && (
         <View style={styles.loadingWrap}>
           <Text variant="bodyLarge" style={styles.loadingText}>Loading library…</Text>
@@ -529,50 +937,125 @@ export default function LibraryScreen() {
         </View>
       )}
       {tab === 'artists' && (
-        <View style={styles.artistsList}>
-          {groupedArtists.map((g) => renderArtistRow(g))}
-          {hasMoreArtists && (
-            <Button mode="outlined" onPress={() => fetchMoreArtists()} loading={artistsLoadingMore} disabled={artistsLoadingMore} style={styles.loadMoreBtn}>
-              {artistsLoadingMore ? 'Loading…' : 'Load more artists'}
-            </Button>
+        <View style={styles.artistsList} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
+          {sectionKeys.map((key) => {
+            const items = artistsByLetter.find((s) => s.letter === key)?.items ?? [];
+            const loading = targetSectionToScroll === key && items.length === 0;
+            return (
+              <React.Fragment key={key}>
+                {renderSectionHeader(key, items.length > 0 || loading)}
+                {items.length > 0 ? (
+                  items.map((g) => renderArtistRow(g))
+                ) : loading ? (
+                  <View style={styles.loadingSectionPlaceholder}>
+                    <ActivityIndicator size="small" color="#4a9eff" style={styles.loadingSectionSpinner} />
+                  </View>
+                ) : (
+                  <View style={styles.sectionEmpty} />
+                )}
+              </React.Fragment>
+            );
+          })}
+          {artistsLoadingMore && (
+            <View style={styles.loadingMoreRow}>
+              <Text variant="bodySmall" style={styles.loadingText}>Loading…</Text>
+            </View>
           )}
         </View>
       )}
 
       {tab === 'albums' && (
         <>
-          {albumsGroupedByDecade
-            ? albumsGroupedByDecade.map((g) => renderAlbumSection(g.decade, g.items, renderAlbumCard))
-            : (
-              <View style={styles.grid}>
+          <View style={styles.sectionListContent} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
+            {sectionKeys.length === 0 ? (
+              <View style={[styles.grid, styles.sectionBlock]}>
                 {albumGroups.map((g) => renderAlbumCard(g))}
               </View>
+            ) : (
+              sectionKeys.map((key) => {
+                const items = albumsGroupedByDecade
+                  ? albumsGroupedByDecade.find((g) => g.decade === key)?.items ?? []
+                  : (albumsByLetter?.find((s) => s.letter === key)?.items ?? []) as { displayTitle: string; albumIds: number[]; primaryAlbum: { id: number }; artistNames: string; usePlaceholderArtwork?: boolean }[];
+                const loading = targetSectionToScroll === key && items.length === 0;
+                return (
+                  <React.Fragment key={key}>
+                    {renderSectionHeader(key, items.length > 0 || loading)}
+                    {items.length > 0 ? (
+                      <View style={[styles.grid, styles.sectionBlock]}>
+                        {items.map((g) => renderAlbumCard(g))}
+                      </View>
+                    ) : loading ? (
+                      <View style={styles.loadingSectionPlaceholder}>
+                        <ActivityIndicator size="small" color="#4a9eff" style={styles.loadingSectionSpinner} />
+                        <View style={styles.skeletonGrid}>
+                          {Array.from({ length: cardsPerRow * 2 }).map((_, i) => (
+                            <View key={i} style={[styles.skeletonCard, { width: cardWidth }]} />
+                          ))}
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.sectionEmpty} />
+                    )}
+                  </React.Fragment>
+                );
+              })
             )}
-          {hasMoreAlbums && (
-            <Button mode="outlined" onPress={() => fetchMoreAlbums()} loading={albumsLoadingMore} disabled={albumsLoadingMore} style={styles.loadMoreBtn}>
-              {albumsLoadingMore ? 'Loading…' : 'Load more albums'}
-            </Button>
+          </View>
+          {albumsLoadingMore && (
+            <View style={styles.loadingMoreRow}>
+              <Text variant="bodySmall" style={styles.loadingText}>Loading…</Text>
+            </View>
           )}
         </>
       )}
 
       {tab === 'songs' && (
         <>
-          {tracksGroupedByDecade
-            ? tracksGroupedByDecade.map((g) => renderSongsSection(g.decade, g.items as (Track & { album_title?: string; artist_name?: string })[]))
-            : (
-              <View style={styles.songsList}>
-                {tracks.map((t: Track & { album_title?: string; artist_name?: string }) => renderTrackListRow(t, tracks))}
-              </View>
-            )}
-          {hasMoreTracks && (
-            <Button mode="outlined" onPress={() => fetchMoreTracks()} loading={tracksLoadingMore} disabled={tracksLoadingMore} style={styles.loadMoreBtn}>
-              {tracksLoadingMore ? 'Loading…' : 'Load more songs'}
-            </Button>
+          <View style={styles.sectionListContent} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
+            {sectionKeys.map((key) => {
+              const items = tracksGroupedByDecade
+                ? (tracksGroupedByDecade.find((g) => g.decade === key)?.items ?? []) as (Track & { album_title?: string; artist_name?: string })[]
+                : (tracksByLetter?.find((s) => s.letter === key)?.items ?? []) as (Track & { album_title?: string; artist_name?: string })[];
+              const loading = targetSectionToScroll === key && items.length === 0;
+              return (
+                <React.Fragment key={key}>
+                  {renderSectionHeader(key, items.length > 0 || loading)}
+                  {items.length > 0 ? (
+                    <View style={[styles.songsList, styles.sectionBlock]}>
+                      {items.map((t) => renderTrackListRow(t, items))}
+                    </View>
+                  ) : loading ? (
+                    <View style={styles.loadingSectionPlaceholder}>
+                      <ActivityIndicator size="small" color="#4a9eff" style={styles.loadingSectionSpinner} />
+                      <View style={styles.skeletonList}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <View key={i} style={styles.skeletonListRow} />
+                        ))}
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.sectionEmpty} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </View>
+          {tracksLoadingMore && (
+            <View style={styles.loadingMoreRow}>
+              <Text variant="bodySmall" style={styles.loadingText}>Loading…</Text>
+            </View>
           )}
         </>
       )}
+          </View>
         </ScrollView>
+        {sectionKeys.length > 0 && !showSuggestions && (
+          <SectionIndex
+            sectionKeys={sectionKeys}
+            currentSection={currentSection}
+            onSectionPress={handleSectionPress}
+          />
+        )}
       </View>
     </View>
   );
@@ -657,11 +1140,48 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   artistsList: {
+    flexDirection: 'column',
     paddingHorizontal: HORIZONTAL_PADDING,
   },
   loadMoreBtn: {
     marginHorizontal: HORIZONTAL_PADDING,
     marginVertical: 16,
+  },
+  loadingMoreRow: {
+    paddingVertical: 12,
+    paddingHorizontal: HORIZONTAL_PADDING,
+    alignItems: 'center',
+  },
+  loadingSectionPlaceholder: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: 24,
+    minHeight: 280,
+  },
+  loadingSectionSpinner: {
+    marginVertical: 12,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: CARD_GAP,
+  },
+  skeletonCard: {
+    height: 120,
+    backgroundColor: '#222',
+    borderRadius: CARD_RADIUS,
+  },
+  skeletonList: {
+    marginTop: 8,
+  },
+  skeletonListRow: {
+    height: 72,
+    backgroundColor: '#222',
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  sectionEmpty: {
+    height: 0,
+    overflow: 'hidden',
   },
   suggestionsSection: {
     paddingHorizontal: HORIZONTAL_PADDING,
@@ -719,6 +1239,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 6,
   },
+  sectionListContent: {
+    flexDirection: 'column',
+    flexGrow: 1,
+  },
+  sectionBlock: {
+    marginBottom: 24,
+  },
   decadeSection: {
     marginBottom: 24,
   },
@@ -727,6 +1254,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  sectionHeaderInvisible: {
+    opacity: 0,
+    height: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    overflow: 'hidden',
   },
   loadingWrap: {
     padding: 24,
