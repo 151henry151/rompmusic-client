@@ -60,24 +60,21 @@ export function getAlbumDisplayTitle(title: string): string {
 }
 
 /**
- * Group albums that share the same artwork (same image = same album for display).
- * Albums with the same non-null artwork_hash become one entry; null hash = one entry per album.
+ * Group albums by same artwork when hash is set; otherwise by primary artist + title + year
+ * so that collaboration variants (e.g. "All. Right. Now." by Satsang vs Satsang/G. Love) and
+ * multi-artist same-title albums (e.g. "Amy") merge into one entry.
  */
-export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): {
-  displayTitle: string;
-  albumIds: number[];
-  primaryAlbum: T;
-  albums: T[];
-  artistNames: string;
-}[] {
-  const byHash = new Map<string, T[]>();
+export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): AlbumGroup[] {
+  const byKey = new Map<string, T[]>();
   for (const a of albums) {
-    const key = a.artwork_hash ?? `__none:${a.id}`;
-    if (!byHash.has(key)) byHash.set(key, []);
-    byHash.get(key)!.push(a);
+    const primaryArtist = getPrimaryArtistName(a.artist_name || 'Unknown').toLowerCase().trim() || '\0';
+    const collabKey = `${primaryArtist}|${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
+    const key = a.artwork_hash ?? `__collab:${collabKey}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(a);
   }
 
-  return Array.from(byHash.entries()).map(([, items]) => {
+  let groups: AlbumGroup[] = Array.from(byKey.entries()).map(([, items]) => {
     const displayTitle = getAlbumDisplayTitle(
       items.reduce((best, i) => (i.title.length < best.length ? i.title : best), items[0].title)
     );
@@ -92,6 +89,9 @@ export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): {
       artistNames,
     };
   });
+
+  groups = mergeDuplicateAlbumTitles(groups);
+  return deduplicateAlbumArtwork(groups);
 }
 
 /**

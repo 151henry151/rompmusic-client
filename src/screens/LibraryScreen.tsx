@@ -95,6 +95,16 @@ function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { let
   return letters.map((letter) => ({ letter, items: groups.get(letter)! }));
 }
 
+/** Sort album groups so has_artwork === true come first (no-art at end of section). */
+function sortGroupsByArtworkFirst<T extends { primaryAlbum: { has_artwork?: boolean | null } }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aHas = a.primaryAlbum.has_artwork === true;
+    const bHas = b.primaryAlbum.has_artwork === true;
+    if (aHas === bHas) return 0;
+    return aHas ? -1 : 1;
+  });
+}
+
 type TabType = 'artists' | 'albums';
 
 function SectionIndex({
@@ -305,7 +315,11 @@ export default function LibraryScreen() {
   const albumsGroupedByDecade = useMemo(() => {
     if (sortBy.albums !== 'year') return null;
     const groupsWithYear = albumGroups.map((g) => ({ ...g, year: g.primaryAlbum.year }));
-    return groupByDecade(groupsWithYear);
+    const byDecade = groupByDecade(groupsWithYear);
+    return byDecade.map(({ decade, items }) => ({
+      decade,
+      items: sortGroupsByArtworkFirst(items),
+    }));
   }, [albumGroups, sortBy.albums]);
 
   const scrollViewRef = useRef<ScrollView | null>(null);
@@ -361,10 +375,14 @@ export default function LibraryScreen() {
   const artistsByLetter = useMemo(() => groupByFirstLetter(groupedArtists, (g) => g.displayName), [groupedArtists]);
   const albumsByLetter = useMemo(() => {
     if (sortBy.albums === 'year' || sortBy.albums === 'date_added') return null;
-    return groupByFirstLetter(
+    const byLetter = groupByFirstLetter(
       albumGroups,
       sortBy.albums === 'artist' ? (g) => g.artistNames : (g) => g.displayTitle
     );
+    return byLetter.map(({ letter, items }) => ({
+      letter,
+      items: sortGroupsByArtworkFirst(items),
+    }));
   }, [albumGroups, sortBy.albums]);
   const sectionKeys = useMemo(() => {
     if (tab === 'artists') return FULL_ALPHABET;
