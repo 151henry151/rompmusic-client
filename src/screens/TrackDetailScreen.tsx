@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Platform, Share, Alert } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -29,7 +29,7 @@ function formatDuration(seconds: number): string {
 export default function TrackDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'TrackDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'TrackDetail'>>();
-  const { trackId } = route.params;
+  const trackId = Number((route.params as { trackId?: number | string }).trackId) || 0;
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
@@ -64,6 +64,46 @@ export default function TrackDetailScreen() {
     navigation.navigate('AlbumDetail', { albumId: track.album_id, highlightTrackId: track.id });
   };
 
+  const getTrackUrl = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      return `${window.location.origin}/track/${track.id}`;
+    }
+    return `https://rompmusic.com/track/${track.id}`;
+  };
+
+  const handleShare = async () => {
+    const url = getTrackUrl();
+    const title = track.title;
+    const message = `${track.title}${track.artist_name ? ` – ${track.artist_name}` : ''}`;
+    try {
+      if (Platform.OS !== 'web' && Share.share) {
+        await Share.share({
+          message: `${message}\n${url}`,
+          url: Platform.OS === 'ios' ? url : undefined,
+          title,
+        });
+      } else if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title, text: message, url });
+      } else if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        Alert.alert('Link copied', 'Track link copied to clipboard.');
+      } else {
+        Alert.alert('Share', url);
+      }
+    } catch {
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(url);
+          Alert.alert('Link copied', 'Track link copied to clipboard.');
+        } catch {
+          Alert.alert('Share', url);
+        }
+      } else {
+        Alert.alert('Share', url);
+      }
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
@@ -90,6 +130,9 @@ export default function TrackDetailScreen() {
       </Button>
       <Button mode="outlined" onPress={handleViewAlbum} style={styles.albumButton} icon="album">
         View album
+      </Button>
+      <Button mode="outlined" onPress={handleShare} style={styles.albumButton} icon="share-variant">
+        Share
       </Button>
     </ScrollView>
   );

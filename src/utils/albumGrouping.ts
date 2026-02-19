@@ -16,6 +16,7 @@ export interface AlbumLike {
   artist_name?: string;
   year?: number | null;
   has_artwork?: boolean | null;
+  artwork_hash?: string | null;
 }
 
 /**
@@ -56,6 +57,41 @@ function normalizeTitleForGrouping(title: string): string {
  */
 export function getAlbumDisplayTitle(title: string): string {
   return stripDiscSuffix(title.trim());
+}
+
+/**
+ * Group albums that share the same artwork (same image = same album for display).
+ * Albums with the same non-null artwork_hash become one entry; null hash = one entry per album.
+ */
+export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): {
+  displayTitle: string;
+  albumIds: number[];
+  primaryAlbum: T;
+  albums: T[];
+  artistNames: string;
+}[] {
+  const byHash = new Map<string, T[]>();
+  for (const a of albums) {
+    const key = a.artwork_hash ?? `__none:${a.id}`;
+    if (!byHash.has(key)) byHash.set(key, []);
+    byHash.get(key)!.push(a);
+  }
+
+  return Array.from(byHash.entries()).map(([, items]) => {
+    const displayTitle = getAlbumDisplayTitle(
+      items.reduce((best, i) => (i.title.length < best.length ? i.title : best), items[0].title)
+    );
+    const albumIds = items.map((i) => i.id);
+    const artistNames = [...new Set(items.map((i) => i.artist_name || 'Unknown'))].join(', ');
+    const primaryAlbum = items.find((i) => i.has_artwork) ?? items[0];
+    return {
+      displayTitle,
+      albumIds,
+      primaryAlbum,
+      albums: items,
+      artistNames,
+    };
+  });
 }
 
 /**

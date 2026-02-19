@@ -181,12 +181,13 @@ export default function AlbumDetailScreen() {
       {isGrouped && allTracksByAlbum.length > 1 ? (
         allTracksByAlbum.map((discTracks, idx) => {
           if (discTracks.length === 0) return null;
-          const discNum = idx + 1;
+          const versionAlbum = albums[idx];
+          const versionTitle = versionAlbum?.title ?? `Version ${idx + 1}`;
           return (
             <View key={effectiveAlbumIds[idx]} style={styles.discSection}>
               <View style={styles.discHeader}>
-                <Text variant="titleSmall" style={styles.section}>
-                  Disc {discNum}
+                <Text variant="titleSmall" style={styles.section} numberOfLines={2}>
+                  {versionTitle}
                 </Text>
                 <Button
                   mode="outlined"

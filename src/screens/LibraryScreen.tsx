@@ -15,7 +15,7 @@ import ArtworkImage, { ArtworkPlaceholder } from '../components/ArtworkImage';
 import { usePlayerStore } from '../store/playerStore';
 import type { Track } from '../store/playerStore';
 import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../utils/artistMerge';
-import { groupAlbums, groupAlbumsWithCollab } from '../utils/albumGrouping';
+import { groupAlbumsByArtwork } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAuthStore } from '../store/authStore';
 import type { AppStackParamList } from '../navigation/types';
@@ -267,8 +267,15 @@ export default function LibraryScreen() {
   const albumsRaw = albumsData?.pages.flat() ?? [];
   const albums = albumsRaw;
   const albumGroups = useMemo(() => {
-    return groupCollaborationsByPrimary ? groupAlbumsWithCollab(albums) : groupAlbums(albums);
-  }, [albums, groupCollaborationsByPrimary]);
+    const groups = groupAlbumsByArtwork(albums);
+    // No-artwork albums at the bottom: scroll to end to see them
+    return [...groups].sort((a, b) => {
+      const aHasArt = a.primaryAlbum.has_artwork === true;
+      const bHasArt = b.primaryAlbum.has_artwork === true;
+      if (aHasArt === bHasArt) return 0;
+      return aHasArt ? -1 : 1;
+    });
+  }, [albums]);
   const { data: searchResultsData, isLoading: searchResultsLoading } = useQuery({
     queryKey: ['search-results', searchQuery],
     queryFn: () => api.search(searchQuery.trim(), 50),
@@ -753,83 +760,168 @@ export default function LibraryScreen() {
     </View>
   );
 
-  const headerHeight = 56 + insets.top;
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrow = windowWidth < MOBILE_BREAKPOINT;
+  const headerHeight = (isNarrow ? 56 + 52 : 56) + insets.top;
   return (
     <View style={styles.container}>
-      <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => {
-            if (Platform.OS === 'web' && typeof window !== 'undefined') {
-              window.location.href = `${window.location.origin}/${getWebBasePath()}`;
-            } else {
-              navigation.navigate('Library');
-            }
-          }}
-          accessibilityRole="link"
-          accessibilityLabel="RompMusic home"
-        >
-          <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="contain" accessibilityLabel="RompMusic" />
-        </Pressable>
-        <View style={styles.tabDropdownWrap}>
-          {renderTabMenu()}
-        </View>
-        <View style={styles.sortWrap}>
-          <TextInput
-            mode="outlined"
-            placeholder="Search…"
-            value={searchInput}
-            onChangeText={setSearchInput}
-            onSubmitEditing={() => setSearchQuery(searchInput.trim())}
-            returnKeyType="search"
-            dense
-            style={styles.searchInput}
-            left={<TextInput.Icon icon="magnify" />}
-            right={
-              searchInput ? (
-                <TextInput.Icon icon="close" onPress={() => { setSearchInput(''); setSearchQuery(''); }} />
-              ) : undefined
-            }
-            accessibilityLabel="Search library"
-          />
-          {renderSortMenu()}
-          {!user && (
-            <View style={styles.authWrap}>
-              <Button
-                mode="text"
-                compact
-                onPress={() => (navigation as any).navigate('Login')}
-                textColor="#94a3b8"
-                style={styles.loginLink}
-                labelStyle={styles.loginLinkLabel}
+      <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }, isNarrow && styles.stickyHeaderNarrow]}>
+        {isNarrow ? (
+          <>
+            <View style={styles.headerRow1}>
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    window.location.href = `${window.location.origin}/${getWebBasePath()}`;
+                  } else {
+                    navigation.navigate('Library');
+                  }
+                }}
+                accessibilityRole="link"
+                accessibilityLabel="RompMusic home"
               >
-                Login
-              </Button>
-              <Button
-                mode="contained"
-                compact
-                onPress={() => (navigation as any).navigate('Register')}
-                style={styles.registerButton}
-                labelStyle={styles.registerButtonLabel}
-              >
-                Register
-              </Button>
+                <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="contain" accessibilityLabel="RompMusic" />
+              </Pressable>
+              <View style={styles.tabDropdownWrap}>
+                {renderTabMenu()}
+              </View>
+              {!user ? (
+                <View style={styles.authWrap}>
+                  <Button
+                    mode="text"
+                    compact
+                    onPress={() => (navigation as any).navigate('Login')}
+                    textColor="#94a3b8"
+                    style={styles.loginLink}
+                    labelStyle={styles.loginLinkLabel}
+                  >
+                    Login
+                  </Button>
+                  <Button
+                    mode="contained"
+                    compact
+                    onPress={() => (navigation as any).navigate('Register')}
+                    style={styles.registerButton}
+                    labelStyle={styles.registerButtonLabel}
+                  >
+                    Register
+                  </Button>
+                </View>
+              ) : (
+                <>
+                  <IconButton
+                    icon="clock-outline"
+                    onPress={() => navigation.navigate('History')}
+                    iconColor="#888"
+                    accessibilityLabel="Play history"
+                  />
+                  <IconButton
+                    icon="cog"
+                    onPress={() => navigation.navigate('Settings')}
+                    iconColor="#888"
+                    accessibilityLabel="Settings"
+                  />
+                </>
+              )}
             </View>
-          )}
-          {user && (
-            <IconButton
-              icon="clock-outline"
-              onPress={() => navigation.navigate('History')}
-              iconColor="#888"
-              accessibilityLabel="Play history"
-            />
-          )}
-          <IconButton
-            icon="cog"
-            onPress={() => navigation.navigate('Settings')}
-            iconColor="#888"
-            accessibilityLabel="Settings"
-          />
-        </View>
+            <View style={styles.headerRow2}>
+              <TextInput
+                mode="outlined"
+                placeholder="Search…"
+                value={searchInput}
+                onChangeText={setSearchInput}
+                onSubmitEditing={() => setSearchQuery(searchInput.trim())}
+                returnKeyType="search"
+                dense
+                style={styles.searchInput}
+                left={<TextInput.Icon icon="magnify" />}
+                right={
+                  searchInput ? (
+                    <TextInput.Icon icon="close" onPress={() => { setSearchInput(''); setSearchQuery(''); }} />
+                  ) : undefined
+                }
+                accessibilityLabel="Search library"
+              />
+              {renderSortMenu()}
+            </View>
+          </>
+        ) : (
+          <>
+            <Pressable
+              onPress={() => {
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                  window.location.href = `${window.location.origin}/${getWebBasePath()}`;
+                } else {
+                  navigation.navigate('Library');
+                }
+              }}
+              accessibilityRole="link"
+              accessibilityLabel="RompMusic home"
+            >
+              <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="contain" accessibilityLabel="RompMusic" />
+            </Pressable>
+            <View style={styles.tabDropdownWrap}>
+              {renderTabMenu()}
+            </View>
+            <View style={styles.sortWrap}>
+              <TextInput
+                mode="outlined"
+                placeholder="Search…"
+                value={searchInput}
+                onChangeText={setSearchInput}
+                onSubmitEditing={() => setSearchQuery(searchInput.trim())}
+                returnKeyType="search"
+                dense
+                style={styles.searchInput}
+                left={<TextInput.Icon icon="magnify" />}
+                right={
+                  searchInput ? (
+                    <TextInput.Icon icon="close" onPress={() => { setSearchInput(''); setSearchQuery(''); }} />
+                  ) : undefined
+                }
+                accessibilityLabel="Search library"
+              />
+              {renderSortMenu()}
+              {!user && (
+                <View style={styles.authWrap}>
+                  <Button
+                    mode="text"
+                    compact
+                    onPress={() => (navigation as any).navigate('Login')}
+                    textColor="#94a3b8"
+                    style={styles.loginLink}
+                    labelStyle={styles.loginLinkLabel}
+                  >
+                    Login
+                  </Button>
+                  <Button
+                    mode="contained"
+                    compact
+                    onPress={() => (navigation as any).navigate('Register')}
+                    style={styles.registerButton}
+                    labelStyle={styles.registerButtonLabel}
+                  >
+                    Register
+                  </Button>
+                </View>
+              )}
+              {user && (
+                <IconButton
+                  icon="clock-outline"
+                  onPress={() => navigation.navigate('History')}
+                  iconColor="#888"
+                  accessibilityLabel="Play history"
+                />
+              )}
+              <IconButton
+                icon="cog"
+                onPress={() => navigation.navigate('Settings')}
+                iconColor="#888"
+                accessibilityLabel="Settings"
+              />
+            </View>
+          </>
+        )}
       </View>
 
       <View style={[styles.scrollWrapper, { top: headerHeight }]}>
@@ -1070,6 +1162,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#0a0a0a',
     flexShrink: 0,
+  },
+  stickyHeaderNarrow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  headerRow1: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+  },
+  headerRow2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+    minWidth: 0,
   },
   headerLogo: {
     width: 32,
