@@ -32,6 +32,13 @@ const DISC_SUFFIX_PATTERNS = [
   /\s*[-–]\s*part\s+\d+\s*$/i,
 ];
 
+/** Edition suffixes so "Always With Me (Deluxe)" and "Always With Me (Deluxe) [bonus tracks]" group together. */
+const EDITION_SUFFIX_PATTERNS = [
+  /\s*\((?:deluxe\s*edition|deluxe|bonus\s*tracks?|expanded\s*edition|expanded|special\s*edition|anniversary\s*edition|remaster(?:ed)?|reissue)\)\s*$/i,
+  /\s*\[(?:bonus\s*tracks?|deluxe\s*edition|deluxe|expanded\s*edition|expanded)\]\s*$/i,
+  /\s*[-–]\s*(?:deluxe\s*edition|deluxe|bonus\s*tracks?|expanded\s*edition)\s*$/i,
+];
+
 function stripDiscSuffix(title: string): string {
   let t = title.trim();
   for (const re of DISC_SUFFIX_PATTERNS) {
@@ -44,12 +51,30 @@ function stripDiscSuffix(title: string): string {
   return t;
 }
 
+/** Strip edition suffixes (Deluxe, Bonus Tracks, etc.) from the end of a title. Applied repeatedly until none match. */
+function stripEditionSuffix(title: string): string {
+  let t = title.trim();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const re of EDITION_SUFFIX_PATTERNS) {
+      const match = t.match(re);
+      if (match) {
+        t = t.slice(0, t.length - match[0].length).trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+  return t;
+}
+
 /**
- * Normalize album title for grouping. Strips multi-disc suffixes so
- * "At Fillmore (Disc 1)" and "At Fillmore (Disc 2)" group together.
+ * Normalize album title for grouping. Strips disc and edition suffixes so
+ * "Always With Me (Deluxe)" and "Always With Me (Bonus Tracks)" group together.
  */
 function normalizeTitleForGrouping(title: string): string {
-  return stripDiscSuffix(title).toLowerCase();
+  return stripEditionSuffix(stripDiscSuffix(title)).toLowerCase();
 }
 
 /**
@@ -57,6 +82,11 @@ function normalizeTitleForGrouping(title: string): string {
  */
 export function getAlbumDisplayTitle(title: string): string {
   return stripDiscSuffix(title.trim());
+}
+
+/** Base title for merging groups: strip edition suffixes so "Always With Me (Deluxe)" matches "Always With Me". */
+function baseTitleForMerge(title: string): string {
+  return stripEditionSuffix(title).toLowerCase().trim();
 }
 
 /**
@@ -171,20 +201,22 @@ export function groupAlbumsWithCollab<T extends AlbumLike>(albums: T[]): AlbumGr
 function mergeDuplicateAlbumTitles(groups: AlbumGroup[]): AlbumGroup[] {
   const byTitle = new Map<string, AlbumGroup>();
   for (const g of groups) {
-    const key = `${g.displayTitle.toLowerCase().trim()}|${g.primaryAlbum.year ?? ''}`;
+    const primaryArtist = getPrimaryArtistName(g.artistNames || 'Unknown').toLowerCase().trim() || '\0';
+    const key = `${primaryArtist}|${baseTitleForMerge(g.displayTitle)}`;
     const existing = byTitle.get(key);
     if (existing) {
       const allAlbums = [...existing.albums, ...g.albums];
       const primaryAlbum = allAlbums.find((i) => i.has_artwork) ?? allAlbums[0];
+      const baseDisplayTitle = stripEditionSuffix(existing.displayTitle).trim();
       byTitle.set(key, {
-        displayTitle: existing.displayTitle,
+        displayTitle: baseDisplayTitle,
         albumIds: [...new Set([...existing.albumIds, ...g.albumIds])],
         primaryAlbum,
         albums: allAlbums,
         artistNames: [...new Set([...(existing.artistNames?.split(', ') || []), ...(g.artistNames?.split(', ') || [])])].join(', '),
       });
     } else {
-      byTitle.set(key, { ...g });
+      byTitle.set(key, { ...g, displayTitle: stripEditionSuffix(g.displayTitle).trim() });
     }
   }
   return Array.from(byTitle.values());

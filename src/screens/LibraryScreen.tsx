@@ -96,10 +96,11 @@ function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { let
 }
 
 /** Sort album groups so "shows real artwork" come first (placeholder / no-art at end of section). */
-function sortGroupsByArtworkFirst<T extends { primaryAlbum: { has_artwork?: boolean | null }; usePlaceholderArtwork?: boolean }>(items: T[]): T[] {
+function sortGroupsByArtworkFirst<T extends { primaryAlbum: { has_artwork?: boolean | null; artwork_hash?: string | null }; usePlaceholderArtwork?: boolean }>(items: T[]): T[] {
   return [...items].sort((a, b) => {
-    const aShowsArt = !a.usePlaceholderArtwork && a.primaryAlbum.has_artwork === true;
-    const bShowsArt = !b.usePlaceholderArtwork && b.primaryAlbum.has_artwork === true;
+    const hasHash = (p: { artwork_hash?: string | null }) => p.artwork_hash != null && p.artwork_hash !== '';
+    const aShowsArt = a.primaryAlbum.has_artwork === true && hasHash(a.primaryAlbum) && a.usePlaceholderArtwork !== true;
+    const bShowsArt = b.primaryAlbum.has_artwork === true && hasHash(b.primaryAlbum) && b.usePlaceholderArtwork !== true;
     if (aShowsArt === bShowsArt) return 0;
     return aShowsArt ? -1 : 1;
   });
@@ -280,12 +281,92 @@ export default function LibraryScreen() {
     const groups = groupAlbumsByArtwork(albums);
     // No-artwork / placeholder albums at the bottom: scroll to end to see them
     return [...groups].sort((a, b) => {
-      const aShowsArt = !a.usePlaceholderArtwork && a.primaryAlbum.has_artwork === true;
-      const bShowsArt = !b.usePlaceholderArtwork && b.primaryAlbum.has_artwork === true;
+      const hasHash = (p: { artwork_hash?: string | null }) => p.artwork_hash != null && p.artwork_hash !== '';
+      const aShowsArt = a.primaryAlbum.has_artwork === true && hasHash(a.primaryAlbum) && a.usePlaceholderArtwork !== true;
+      const bShowsArt = b.primaryAlbum.has_artwork === true && hasHash(b.primaryAlbum) && b.usePlaceholderArtwork !== true;
       if (aShowsArt === bShowsArt) return 0;
       return aShowsArt ? -1 : 1;
     });
   }, [albums]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const debugEnabled =
+      window.location.search.includes('debug=1') ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('rompmusic_debug') === '1');
+    if (!debugEnabled) return;
+    if (searchQuery || albumGroups.length === 0) return;
+    const hasHash = (p: { artwork_hash?: string | null }) => p.artwork_hash != null && p.artwork_hash !== '';
+    const showsArt = (g: typeof albumGroups[0]) =>
+      g.primaryAlbum.has_artwork === true && hasHash(g.primaryAlbum) && g.usePlaceholderArtwork !== true;
+    const withArt = albumGroups.filter((g) => showsArt(g));
+    const noArt = albumGroups.filter((g) => !showsArt(g));
+    const matter = albumGroups.filter(
+      (g) => /matter of life/i.test(g.displayTitle) || /iron maiden/i.test(g.artistNames || '')
+    );
+    const alwaysWithMe = albumGroups.filter((g) => /always with me/i.test(g.displayTitle) || /the movement/i.test(g.artistNames || ''));
+    const rawMatter = albums.filter(
+      (a: { title?: string; artist_name?: string }) => /matter of life/i.test(a.title || '') || /iron maiden/i.test(a.artist_name || '')
+    );
+    const rawAlways = albums.filter(
+      (a: { title?: string; artist_name?: string }) => /always with me/i.test(a.title || '') || /the movement/i.test(a.artist_name || '')
+    );
+    console.warn(
+      'RompMusic album debug — URL: ' + window.location.href,
+      '(To enable from console: localStorage.setItem("rompmusic_debug","1"); location.href=location.origin+"/app";)'
+    );
+    console.log('Album grouping and sort:');
+    console.log('  Total groups:', albumGroups.length, '| With art (sorted first):', withArt.length, '| No art (sorted last):', noArt.length);
+    if (matter.length > 0) {
+      console.log('  [Iron Maiden / A Matter of Life and Death] groups:', matter.length);
+      matter.forEach((g, i) => {
+        console.log(`    [${i}]`, {
+          displayTitle: g.displayTitle,
+          artistNames: g.artistNames,
+          albumIds: g.albumIds,
+          albumCount: g.albums.length,
+          has_artwork: g.primaryAlbum.has_artwork,
+          artwork_hash: g.primaryAlbum.artwork_hash ? `${String(g.primaryAlbum.artwork_hash).slice(0, 8)}…` : null,
+          usePlaceholderArtwork: g.usePlaceholderArtwork,
+          showsArt: showsArt(g),
+        });
+      });
+      console.log('  Raw API albums (Matter/Iron Maiden):', rawMatter.map((a: { id: number; title?: string; artist_name?: string; has_artwork?: boolean; artwork_hash?: string | null }) => ({
+        id: a.id,
+        title: a.title,
+        artist_name: a.artist_name,
+        has_artwork: a.has_artwork,
+        artwork_hash: a.artwork_hash ? `${String(a.artwork_hash).slice(0, 8)}…` : null,
+      })));
+    }
+    if (alwaysWithMe.length > 0) {
+      console.log('  [The Movement / Always With Me] groups:', alwaysWithMe.length);
+      alwaysWithMe.forEach((g, i) => {
+        console.log(`    [${i}]`, {
+          displayTitle: g.displayTitle,
+          artistNames: g.artistNames,
+          albumIds: g.albumIds,
+          albumCount: g.albums.length,
+          has_artwork: g.primaryAlbum.has_artwork,
+          artwork_hash: g.primaryAlbum.artwork_hash ? `${String(g.primaryAlbum.artwork_hash).slice(0, 8)}…` : null,
+          usePlaceholderArtwork: g.usePlaceholderArtwork,
+          showsArt: showsArt(g),
+        });
+      });
+      console.log('  Raw API albums (Always With Me / The Movement):', rawAlways.map((a: { id: number; title?: string; artist_name?: string; has_artwork?: boolean; artwork_hash?: string | null }) => ({
+        id: a.id,
+        title: a.title,
+        artist_name: a.artist_name,
+        has_artwork: a.has_artwork,
+        artwork_hash: a.artwork_hash ? `${String(a.artwork_hash).slice(0, 8)}…` : null,
+      })));
+    }
+    console.log(
+      '  Enable debug from any page: localStorage.setItem("rompmusic_debug","1"); location.href=location.origin+"/app";',
+      'Disable: localStorage.removeItem("rompmusic_debug"); location.reload();'
+    );
+  }, [albumGroups, albums, searchQuery]);
+
   const { data: searchResultsData, isLoading: searchResultsLoading } = useQuery({
     queryKey: ['search-results', searchQuery],
     queryFn: () => api.search(searchQuery.trim(), 50),
@@ -782,7 +863,7 @@ export default function LibraryScreen() {
   const isNarrow = windowWidth < MOBILE_BREAKPOINT;
   const headerHeight = (isNarrow ? 56 + 52 : 56) + insets.top;
   return (
-    <View style={styles.container}>
+    <View style={styles.container} dataSet={{ buildLabel: '2026-02-18-editions-noart' }}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }, isNarrow && styles.stickyHeaderNarrow]}>
         {isNarrow ? (
           <>

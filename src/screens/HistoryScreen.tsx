@@ -58,7 +58,7 @@ export default function HistoryScreen() {
           <Text style={styles.muted}>Loading…</Text>
         )}
         {!isLoading && list.length === 0 && (
-          <Text style={styles.muted}>No play history. Play some tracks while signed in to see them here.</Text>
+          <Text style={styles.muted}>No play history. Play some tracks to see them here.</Text>
         )}
         {list.length > 0 && list.map((t) => (
           <List.Item

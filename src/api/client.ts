@@ -39,7 +39,7 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { ...opts, headers, cache: 'no-store' });
+  const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials: 'include' });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(err || `HTTP ${res.status}`);
