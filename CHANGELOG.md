@@ -11,11 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
-## [0.1.0-beta.4] - 2026-02-16
+## [0.1.0-beta.5] - 2026-02-18
 
 ### Added
 
-- Favicon from project logo.
+- **Album grouping by artwork** — Albums that share the same cover image (identical `artwork_hash` from the server) appear as a single card in the Library. Tapping it opens the album detail with each version (e.g. different discs or editions) listed as separate sections with their full titles.
+- **Collaboration and duplicate-title grouping** — When artwork hash is not yet available, albums are grouped by primary artist + normalized title + year so that variants (e.g. "All. Right. Now." by Satsang vs Satsang/G. Love) and same-title albums with different artist credits (e.g. "Amy") merge into one entry. After grouping, groups with the same display title and year are merged (e.g. multi-artist "Amy").
+- **Track share** — Share button on the track detail screen: native Share on mobile; on web, uses `navigator.share` or copies the track URL (e.g. `https://rompmusic.com/track/123`) to the clipboard. Track deep links `/track/:id` are supported (website redirects to `/app/track/:id`).
+
+### Changed
+
+- **Albums with no artwork at the bottom** — Albums that show the placeholder (no cover art, or artwork deduplicated) are sorted to the end of the album list. Sorting uses "shows real artwork" (not placeholder) so it applies both globally and within each A–Z letter and decade section. Scroll to the bottom of the Library albums tab to see albums without art.
+- Album detail screen shows the actual album title for each version when multiple versions are grouped (e.g. "Blonde On Blonde - Disc 1 (2010 Mono Remaster)") instead of "Disc 1", "Disc 2".
+
+### Fixed
+
+- No-artwork albums (e.g. Iron Maiden "A Matter of Life and Death") no longer appear in alphabetical position; they appear at the end of their letter section and at the end of the list, using both `has_artwork` and `usePlaceholderArtwork` for sort order.
 
 ## [0.1.0-beta.3] - 2026-02-17
 
@@ -46,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Queue / "play next" bug: playing an album then choosing "play next" on another song could show the wrong track playing (second album track) while UI showed the "play next" song. Fixed by clearing preload and preloading the new next track when the queue changes.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.4...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.5...HEAD
+[0.1.0-beta.5]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.2

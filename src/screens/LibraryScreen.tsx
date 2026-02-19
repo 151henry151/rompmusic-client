@@ -95,13 +95,13 @@ function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { let
   return letters.map((letter) => ({ letter, items: groups.get(letter)! }));
 }
 
-/** Sort album groups so has_artwork === true come first (no-art at end of section). */
-function sortGroupsByArtworkFirst<T extends { primaryAlbum: { has_artwork?: boolean | null } }>(items: T[]): T[] {
+/** Sort album groups so "shows real artwork" come first (placeholder / no-art at end of section). */
+function sortGroupsByArtworkFirst<T extends { primaryAlbum: { has_artwork?: boolean | null }; usePlaceholderArtwork?: boolean }>(items: T[]): T[] {
   return [...items].sort((a, b) => {
-    const aHas = a.primaryAlbum.has_artwork === true;
-    const bHas = b.primaryAlbum.has_artwork === true;
-    if (aHas === bHas) return 0;
-    return aHas ? -1 : 1;
+    const aShowsArt = !a.usePlaceholderArtwork && a.primaryAlbum.has_artwork === true;
+    const bShowsArt = !b.usePlaceholderArtwork && b.primaryAlbum.has_artwork === true;
+    if (aShowsArt === bShowsArt) return 0;
+    return aShowsArt ? -1 : 1;
   });
 }
 
@@ -278,12 +278,12 @@ export default function LibraryScreen() {
   const albums = albumsRaw;
   const albumGroups = useMemo(() => {
     const groups = groupAlbumsByArtwork(albums);
-    // No-artwork albums at the bottom: scroll to end to see them
+    // No-artwork / placeholder albums at the bottom: scroll to end to see them
     return [...groups].sort((a, b) => {
-      const aHasArt = a.primaryAlbum.has_artwork === true;
-      const bHasArt = b.primaryAlbum.has_artwork === true;
-      if (aHasArt === bHasArt) return 0;
-      return aHasArt ? -1 : 1;
+      const aShowsArt = !a.usePlaceholderArtwork && a.primaryAlbum.has_artwork === true;
+      const bShowsArt = !b.usePlaceholderArtwork && b.primaryAlbum.has_artwork === true;
+      if (aShowsArt === bShowsArt) return 0;
+      return aShowsArt ? -1 : 1;
     });
   }, [albums]);
   const { data: searchResultsData, isLoading: searchResultsLoading } = useQuery({
