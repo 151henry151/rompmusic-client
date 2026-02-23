@@ -16,6 +16,7 @@ import RegisterScreen from '../screens/RegisterScreen';
 import VerifyEmailScreen from '../screens/VerifyEmailScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import ServerSetupScreen from '../screens/ServerSetupScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HistoryScreen from '../screens/HistoryScreen';
@@ -27,6 +28,7 @@ import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore, type Track } from '../store/playerStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useServerStore } from '../store/serverStore';
 import type { RootStackParamList, AppStackParamList } from './types';
 import { getWebBasePath } from '../utils/webBasePath';
 
@@ -130,8 +132,14 @@ function AuthenticatedLayout() {
 
 export default function AppNavigator() {
   const { isReady } = useAuthStore();
+  const isServerRestored = useServerStore((s) => s.isRestored);
+  const hasConfiguredServer = useServerStore((s) => s.hasConfiguredServer);
 
-  if (!isReady) return null;
+  if (!isReady || !isServerRestored) return null;
+
+  if (!hasConfiguredServer()) {
+    return <ServerSetupScreen />;
+  }
 
   const webBasePath = Platform.OS === 'web' ? getWebBasePath() : 'app';
   const linkingConfig = {

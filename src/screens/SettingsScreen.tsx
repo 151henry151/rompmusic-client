@@ -5,10 +5,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Linking } from 'react-native';
-import { Text, List, Button, Switch, Menu, Dialog, Portal } from 'react-native-paper';
+import { Text, List, Button, Switch, Menu, Dialog, Portal, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useServerStore, normalizeServerUrl } from '../store/serverStore';
 
 
 export default function SettingsScreen() {
@@ -25,6 +26,14 @@ export default function SettingsScreen() {
   const isSettingVisible = useSettingsStore((s) => s.isSettingVisible);
   const [audioMenuVisible, setAudioMenuVisible] = useState(false);
   const [aboutVisible, setAboutVisible] = useState(false);
+  const [serverDialogVisible, setServerDialogVisible] = useState(false);
+  const [serverInput, setServerInput] = useState('');
+  const [serverSaving, setServerSaving] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const getDisplayServerUrl = useServerStore((s) => s.getDisplayServerUrl);
+  const setServerUrl = useServerStore((s) => s.setServerUrl);
+  const displayServerUrl = getDisplayServerUrl();
 
   const WEBSITE_BASE = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://rompmusic.com';
 
@@ -32,11 +41,50 @@ export default function SettingsScreen() {
     restoreSettings();
   }, [restoreSettings]);
 
+  const openServerDialog = () => {
+    setServerInput(displayServerUrl || '');
+    setServerError(null);
+    setServerDialogVisible(true);
+  };
+
+  const saveServerUrl = async () => {
+    const normalized = normalizeServerUrl(serverInput);
+    if (!normalized) {
+      setServerError('Please enter a valid server URL (e.g. https://music.example.com)');
+      return;
+    }
+    setServerSaving(true);
+    setServerError(null);
+    try {
+      await setServerUrl(normalized);
+      await logout();
+      setServerDialogVisible(false);
+    } catch (e) {
+      setServerError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setServerSaving(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text variant="headlineSmall" style={styles.header}>
         Settings
       </Text>
+
+      <Text variant="titleSmall" style={styles.section}>
+        Server
+      </Text>
+      <List.Item
+        title="Server URL"
+        description={displayServerUrl ? displayServerUrl : "Using this build's default server"}
+        left={() => <List.Icon icon="server" />}
+        right={(props) => <List.Icon {...props} icon="chevron-right" />}
+        onPress={openServerDialog}
+        style={styles.item}
+        accessibilityRole="button"
+        accessibilityLabel="Change server URL"
+      />
 
       <Text variant="titleSmall" style={styles.section}>
         Library
@@ -161,6 +209,35 @@ export default function SettingsScreen() {
             <Button onPress={() => setAboutVisible(false)}>OK</Button>
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog visible={serverDialogVisible} onDismiss={() => !serverSaving && setServerDialogVisible(false)} style={styles.dialog}>
+          <Dialog.Title>Server URL</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={styles.dialogText}>
+              Enter your RompMusic server address (e.g. https://music.example.com). Changing the server will log you out.
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Server URL"
+              placeholder="https://music.example.com"
+              value={serverInput}
+              onChangeText={(t) => { setServerInput(t); setServerError(null); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              style={styles.serverInput}
+              outlineColor="#333"
+              activeOutlineColor="#4a9eff"
+              textColor="#fff"
+              disabled={serverSaving}
+            />
+            {serverError ? <Text style={styles.serverError}>{serverError}</Text> : null}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => !serverSaving && setServerDialogVisible(false)} disabled={serverSaving}>Cancel</Button>
+            <Button onPress={saveServerUrl} loading={serverSaving} disabled={serverSaving}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
 
       <Button mode="contained" onPress={logout} style={styles.logout}>
@@ -197,5 +274,13 @@ const styles = StyleSheet.create({
   dialogText: {
     color: '#e0e0e0',
     lineHeight: 24,
+  },
+  serverInput: {
+    marginTop: 12,
+  },
+  serverError: {
+    color: '#f87171',
+    marginTop: 8,
+    fontSize: 14,
   },
 });

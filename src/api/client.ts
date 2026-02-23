@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// On web, use full origin + /api/v1 so requests always hit the API (not resolved relative to /app/).
-// For native/SSR use env or default.
-const API_BASE =
-  typeof window !== 'undefined'
-    ? `${window.location.origin}/api/v1`
-    : (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api/v1');
+import { useServerStore } from '../store/serverStore';
+
+/** Resolve API base URL from server store (user-configured or env for demo build). */
+function getApiBase(): string {
+  return useServerStore.getState().getApiBase();
+}
 
 let token: string | null = null;
 
@@ -31,7 +31,8 @@ function toQueryString(params: Record<string, string | number | boolean | undefi
 }
 
 async function fetchApi(path: string, opts: RequestInit = {}) {
-  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+  const base = getApiBase();
+  const url = path.startsWith('http') ? path : `${base}${path}`;
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(opts.headers as Record<string, string>),
@@ -92,7 +93,8 @@ export const api = {
   },
 
   getStreamUrl(trackId: number, format?: 'original' | 'ogg') {
-    const base = `${API_BASE.replace('/api/v1', '')}/api/v1/stream/${trackId}`;
+    const apiBase = getApiBase();
+    const base = `${apiBase.replace(/\/api\/v1\/?$/, '')}/api/v1/stream/${trackId}`;
     if (format && format !== 'original') {
       return base + (base.includes('?') ? '&' : '?') + 'format=' + encodeURIComponent(format);
     }
@@ -104,7 +106,8 @@ export const api = {
   },
 
   getArtworkUrl(type: 'album', id: number) {
-    return `${API_BASE.replace('/api/v1', '')}/api/v1/artwork/${type}/${id}`;
+    const apiBase = getApiBase();
+    return `${apiBase.replace(/\/api\/v1\/?$/, '')}/api/v1/artwork/${type}/${id}`;
   },
 
   async getArtists(params?: { skip?: number; limit?: number; search?: string; home?: boolean; sort_by?: string; order?: string }) {
