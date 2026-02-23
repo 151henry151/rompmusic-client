@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Image, View, StyleSheet, Platform } from 'react-native';
+import { Image, View, Text, StyleSheet, Platform } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../api/client';
@@ -113,16 +113,21 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
   );
 }
 
-/** Placeholder when artwork fails to load - dark box with music icon area */
+/** Placeholder when no album art - dark box with subtle "no album art" label */
 export function ArtworkPlaceholder({ size = 64, style }: { size?: number; style?: object }) {
+  const radius = size / 8;
   return (
     <View
       style={[
         styles.placeholder,
-        { width: size, height: size, borderRadius: size / 8 },
+        { width: size, height: size, borderRadius: radius, justifyContent: 'center', alignItems: 'center' },
         style,
       ]}
-    />
+    >
+      <Text style={[styles.noArtLabel, { fontSize: Math.max(10, Math.min(12, size * 0.12)) }]} numberOfLines={2}>
+        no album art
+      </Text>
+    </View>
   );
 }
 
@@ -130,5 +135,10 @@ const styles = StyleSheet.create({
   placeholder: {
     backgroundColor: '#333',
     overflow: 'hidden',
+  },
+  noArtLabel: {
+    color: '#555',
+    textAlign: 'center',
+    paddingHorizontal: 4,
   },
 });

@@ -13,9 +13,17 @@ import { api } from '../api/client';
 import { getToken } from '../api/client';
 import { useSettingsStore } from './settingsStore';
 
-/** Web browsers need transcoded OGG; native can use original format. */
+/**
+ * Web: Safari does not support OGG, so use original (MP3/M4A/AAC/FLAC work in Safari).
+ * Other browsers get OGG for consistent behavior. Native uses settings.
+ */
 function getStreamFormat(): 'original' | 'ogg' {
-  if (Platform.OS === 'web') return 'ogg';
+  if (Platform.OS === 'web') {
+    if (typeof navigator !== 'undefined' && navigator.vendor?.includes('Apple') && typeof navigator.userAgent === 'string' && !navigator.userAgent.includes('CriOS') && !navigator.userAgent.includes('FxiOS')) {
+      return 'original';
+    }
+    return 'ogg';
+  }
   return useSettingsStore.getState().getEffectiveStreamFormat();
 }
 
@@ -81,18 +89,23 @@ function loadAndPlay(
   track: Track,
   onFinish: () => void,
   onPositionUpdate: (pos: number) => void,
-  position = 0
+  position = 0,
+  onPlaybackStarted?: () => void
 ): AudioPlayer {
   const url = getStreamUrl(track);
-  // downloadFirst: false so the player gets the URL immediately and can stream (reduces long delay when starting playback; with downloadFirst: true we'd wait for full download/transcode before replace()).
   const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: false });
   player.volume = currentVolume;
   if (position > 0) {
     player.seekTo(position);
   }
   let finished = false;
+  let startedNotified = false;
   player.addListener('playbackStatusUpdate', (status) => {
     onPositionUpdate(status.currentTime);
+    if (onPlaybackStarted && !startedNotified && (status.isLoaded || (status.currentTime ?? 0) > 0)) {
+      startedNotified = true;
+      onPlaybackStarted();
+    }
     const dur = status.duration ?? 0;
     const pos = status.currentTime ?? 0;
     if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
@@ -187,17 +200,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!currentTrack) return;
     set({ isPlaying: true, isLoading: true, error: null });
     const onPosition = (pos: number) => set({ position: pos });
+    const onPlaybackStarted = () => set({ isLoading: false });
     try {
       if (sound) {
         sound.play();
+        set({ isLoading: false });
       } else {
         const nextIndex = currentIndex + 1;
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
-        sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position);
+        sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
         setLockScreenMetadata(sound, currentTrack);
         if (nextTrack) nextSound = preloadNext(nextTrack);
+        // Keep isLoading true until onPlaybackStarted fires (stream has started)
       }
-      set({ isPlaying: true, isLoading: false });
     } catch (e) {
       set({
         isLoading: false,

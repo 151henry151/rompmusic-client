@@ -11,6 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.0-beta.6] - 2026-02-19
+
+### Added
+
+- **Cookie-based play history when not signed in** — API requests use `credentials: 'include'` so the anonymous play-history cookie is sent and stored. Play history and streaming record/retrieve by cookie when the user is not logged in (public server).
+- **Play history icon when logged out** — The clock (play history) icon is shown in the Library header for all users, not only when signed in.
+- **Album share** — Share button on the album detail screen (single and multiple editions). Uses native Share on mobile; on web, `navigator.share` or copies album URL to clipboard with in-app “Link copied!” feedback (no reliance on `Alert` on web).
+- **Track share in track menu** — “Share” option in the three-dots menu for each track on the album detail screen (same share/copy behavior as album share).
+- **Direct album URL** — Opening or refreshing `/app/album/2936` (or `rompmusic.com/album/2936` after redirect) now correctly shows the album detail screen; custom `getStateFromPath` strips the web base path so the router parses the URL.
+
+### Changed
+
+- **No-artwork placeholder** — Placeholder shows subtle “no album art” text (lighter grey, small font) instead of a blank grey square.
+- **Multiple editions (grouped albums)** — When an album has multiple editions, the album detail shows an “Editions” section: each edition has its own title, centered “Play album” / “Add to queue” / “Play next” buttons, and its own track list (no merged duplicate list). Single “Play album” at top is only for single-album view.
+- **Track list deduplication** — Album detail dedupes tracks by id and by (album_id, disc_number, track_number) so duplicate DB rows or merged editions never show the same track twice.
+- **Library first load** — Initial page size reduced from 500 to 80 for artists and albums so the first paint is faster; “Load more” still fetches more.
+- **Loading state** — “Loading…” in the mini player stays until playback has actually started (first `playbackStatusUpdate` with loaded/position), not just when the request is sent.
+- **Safari playback** — On web, Safari is detected (Apple vendor, not CriOS/FxiOS); Safari requests **original** format instead of OGG because Safari does not support OGG. Playback works on Safari (e.g. MacBook) when files are MP3/M4A/AAC/FLAC.
+
+### Fixed
+
+- Play history empty message no longer says “while signed in”; updated to “Play some tracks to see them here.”
+
 ## [0.1.0-beta.5] - 2026-02-18
 
 ### Added
@@ -57,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Queue / "play next" bug: playing an album then choosing "play next" on another song could show the wrong track playing (second album track) while UI showed the "play next" song. Fixed by clearing preload and preloading the new next track when the queue changes.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.5...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.6...HEAD
+[0.1.0-beta.6]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.3

@@ -134,29 +134,41 @@ export default function AppNavigator() {
   if (!isReady) return null;
 
   const webBasePath = Platform.OS === 'web' ? getWebBasePath() : 'app';
+  const linkingConfig = {
+    screens: {
+      App: {
+        path: '',
+        screens: {
+          Library: '',
+          History: 'history',
+          Settings: 'settings',
+          ArtistDetail: 'artist/:artistIds',
+          AlbumDetail: 'album/:albumId',
+          TrackDetail: 'track/:trackId',
+        },
+      },
+      Login: 'login',
+      Register: 'register',
+      VerifyEmail: 'verify-email',
+      ForgotPassword: 'forgot-password',
+      ResetPassword: 'reset-password',
+    },
+  };
   const linking = Platform.OS === 'web' && typeof window !== 'undefined'
     ? {
         prefixes: [window.location.origin + '/' + webBasePath, '/' + webBasePath],
-        config: {
-          screens: {
-            App: {
-              path: '',
-              screens: {
-                Library: '',
-                History: 'history',
-                Settings: 'settings',
-                ArtistDetail: 'artist/:artistIds',
-                AlbumDetail: 'album/:albumId',
-                TrackDetail: 'track/:trackId',
-                // ForgotPassword/ResetPassword exist at root too; omit here to avoid duplicate pattern
-              },
-            },
-            Login: 'login',
-            Register: 'register',
-            VerifyEmail: 'verify-email',
-            ForgotPassword: 'forgot-password',
-            ResetPassword: 'reset-password',
-          },
+        config: linkingConfig,
+        // Web passes full pathname (e.g. "/app/album/2936"); strip base so default parser gets "album/2936"
+        getStateFromPath(path: string, options?: object) {
+          const { getStateFromPath: defaultGetStateFromPath } = require('@react-navigation/native');
+          let normalized = path.replace(/^\/+/, '');
+          const base = webBasePath.replace(/^\/+/, '');
+          if (normalized.startsWith(base + '/')) {
+            normalized = normalized.slice(base.length).replace(/^\/+/, '');
+          } else if (normalized === base) {
+            normalized = '';
+          }
+          return defaultGetStateFromPath(normalized, (options as object) ?? linkingConfig);
         },
       }
     : undefined;

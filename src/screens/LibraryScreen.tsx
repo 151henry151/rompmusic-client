@@ -26,8 +26,8 @@ const HORIZONTAL_PADDING = 16;
 const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
 /** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
-const LIBRARY_ARTISTS_PAGE_SIZE = 500;
-const LIBRARY_ALBUMS_PAGE_SIZE = 500;
+const LIBRARY_ARTISTS_PAGE_SIZE = 80;
+const LIBRARY_ALBUMS_PAGE_SIZE = 80;
 const LIBRARY_TRACKS_PAGE_SIZE = 1000;
 
 /** Full A–Z + # for the section index when sorted alphabetically (always show all letters). */
@@ -884,6 +884,12 @@ export default function LibraryScreen() {
               <View style={styles.tabDropdownWrap}>
                 {renderTabMenu()}
               </View>
+              <IconButton
+                icon="clock-outline"
+                onPress={() => navigation.navigate('History')}
+                iconColor="#888"
+                accessibilityLabel="Play history"
+              />
               {!user ? (
                 <View style={styles.authWrap}>
                   <Button
@@ -907,20 +913,12 @@ export default function LibraryScreen() {
                   </Button>
                 </View>
               ) : (
-                <>
-                  <IconButton
-                    icon="clock-outline"
-                    onPress={() => navigation.navigate('History')}
-                    iconColor="#888"
-                    accessibilityLabel="Play history"
-                  />
-                  <IconButton
-                    icon="cog"
-                    onPress={() => navigation.navigate('Settings')}
-                    iconColor="#888"
-                    accessibilityLabel="Settings"
-                  />
-                </>
+                <IconButton
+                  icon="cog"
+                  onPress={() => navigation.navigate('Settings')}
+                  iconColor="#888"
+                  accessibilityLabel="Settings"
+                />
               )}
             </View>
             <View style={styles.headerRow2}>
@@ -1004,14 +1002,12 @@ export default function LibraryScreen() {
                   </Button>
                 </View>
               )}
-              {user && (
-                <IconButton
-                  icon="clock-outline"
-                  onPress={() => navigation.navigate('History')}
-                  iconColor="#888"
-                  accessibilityLabel="Play history"
-                />
-              )}
+              <IconButton
+                icon="clock-outline"
+                onPress={() => navigation.navigate('History')}
+                iconColor="#888"
+                accessibilityLabel="Play history"
+              />
               <IconButton
                 icon="cog"
                 onPress={() => navigation.navigate('Settings')}

@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { ScrollView, StyleSheet, View, Platform, Share } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -36,6 +36,7 @@ function TrackRow({
   onPress,
   addToQueue,
   playNext,
+  onShare,
 }: {
   track: Track & { album_title?: string; artist_name?: string };
   albumId: number;
@@ -44,6 +45,7 @@ function TrackRow({
   onPress: () => void;
   addToQueue: (t: Track | Track[]) => void;
   playNext: (t: Track | Track[]) => void;
+  onShare?: (t: Track & { album_title?: string; artist_name?: string }) => void;
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
   return (
@@ -61,6 +63,9 @@ function TrackRow({
           >
             <Menu.Item onPress={() => { addToQueue(track); setMenuVisible(false); }} title="Add to queue" leadingIcon="playlist-plus" />
             <Menu.Item onPress={() => { playNext(track); setMenuVisible(false); }} title="Play next" leadingIcon="play-circle" />
+            {onShare && (
+              <Menu.Item onPress={() => { onShare(track); setMenuVisible(false); }} title="Share" leadingIcon="share-variant" />
+            )}
           </Menu>
         </View>
       )}
@@ -76,7 +81,11 @@ export default function AlbumDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'AlbumDetail'>>();
   const { albumId, albumIds, highlightTrackId } = route.params;
-  const effectiveAlbumIds = albumIds ?? (albumId != null ? [albumId] : []);
+  // Normalize to unique numbers (URL may give string; avoid duplicate ids from any source)
+  const effectiveAlbumIds = useMemo(() => {
+    const raw = albumIds ?? (albumId != null ? [albumId] : []);
+    return [...new Set(raw.map((id) => Number(id)).filter(Boolean))];
+  }, [albumId, albumIds]);
   const isGrouped = effectiveAlbumIds.length > 1;
 
   const playTrack = usePlayerStore((s) => s.playTrack);
@@ -97,14 +106,30 @@ export default function AlbumDetailScreen() {
   });
 
   const albums = useMemo(() => albumQueries.map((q) => q.data).filter(Boolean) as Awaited<ReturnType<typeof api.getAlbum>>[], [albumQueries]);
+  /** Dedupe by track id, then by (album_id, disc, track) so we never show logical duplicates (duplicate DB rows or merged editions). */
+  const dedupeTracks = (tracks: (Track & { album_title?: string; artist_name?: string })[]) => {
+    const seenId = new Set<number>();
+    const seenSlot = new Set<string>();
+    return tracks.filter((t) => {
+      const key = `${t.album_id}|${t.disc_number}|${t.track_number}`;
+      if (seenId.has(t.id) || seenSlot.has(key)) return false;
+      seenId.add(t.id);
+      seenSlot.add(key);
+      return true;
+    });
+  };
   const allTracksByAlbum = useMemo(
-    () => trackQueries.map((q) => (q.data || []) as (Track & { album_title?: string; artist_name?: string })[]),
+    () =>
+      trackQueries.map((q) => {
+        const list = (q.data || []) as (Track & { album_title?: string; artist_name?: string })[];
+        return dedupeTracks(list).sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
+      }),
     [trackQueries]
   );
   const mergedTracks = useMemo(() => {
     const out: (Track & { album_title?: string; artist_name?: string })[] = [];
     allTracksByAlbum.forEach((arr) => out.push(...arr));
-    return out.sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
+    return dedupeTracks(out).sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
   }, [allTracksByAlbum]);
 
   const primaryAlbum = albums[0];
@@ -124,6 +149,79 @@ export default function AlbumDetailScreen() {
     navigation.navigate('TrackDetail', { trackId: track.id });
   };
 
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const clearShareFeedback = useCallback(() => {
+    setShareFeedback(null);
+  }, []);
+
+  const getAlbumUrl = () => {
+    const id = primaryAlbumId ?? effectiveAlbumIds[0];
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      return `${window.location.origin}/album/${id}`;
+    }
+    return `${typeof window !== 'undefined' ? window.location?.origin : 'https://rompmusic.com'}/album/${id}`;
+  };
+
+  const copyToClipboardAndNotify = useCallback((url: string, message: string) => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(
+        () => {
+          setShareFeedback(message);
+          setTimeout(clearShareFeedback, 2500);
+        },
+        () => setShareFeedback(url)
+      );
+    } else {
+      setShareFeedback(url);
+      setTimeout(clearShareFeedback, 2500);
+    }
+  }, [clearShareFeedback]);
+
+  const handleShare = async () => {
+    const url = getAlbumUrl();
+    const title = displayTitle || 'Album';
+    const message = `${displayTitle}${artistNames ? ` – ${artistNames}` : ''}`;
+    try {
+      if (Platform.OS !== 'web' && Share.share) {
+        await Share.share({
+          message: `${message}\n${url}`,
+          url: Platform.OS === 'ios' ? url : undefined,
+          title,
+        });
+      } else if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title, text: message, url });
+      } else {
+        copyToClipboardAndNotify(url, 'Album link copied!');
+      }
+    } catch {
+      copyToClipboardAndNotify(url, 'Album link copied!');
+    }
+  };
+
+  const getTrackUrl = useCallback((trackId: number) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      return `${window.location.origin}/track/${trackId}`;
+    }
+    return `${typeof window !== 'undefined' ? window.location?.origin : 'https://rompmusic.com'}/track/${trackId}`;
+  }, []);
+
+  const handleShareTrack = useCallback((track: Track & { album_title?: string; artist_name?: string }) => {
+    const url = getTrackUrl(track.id);
+    const title = track.title;
+    const message = `${track.title}${track.artist_name ? ` – ${track.artist_name}` : ''}`;
+    if (Platform.OS !== 'web' && Share.share) {
+      Share.share({
+        message: `${message}\n${url}`,
+        url: Platform.OS === 'ios' ? url : undefined,
+        title,
+      }).catch(() => copyToClipboardAndNotify(url, 'Track link copied!'));
+    } else if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+      navigator.share({ title, text: message, url }).catch(() => copyToClipboardAndNotify(url, 'Track link copied!'));
+    } else {
+      copyToClipboardAndNotify(url, 'Track link copied!');
+    }
+  }, [getTrackUrl, copyToClipboardAndNotify]);
+
   if (effectiveAlbumIds.length === 0) {
     return (
       <ScrollView style={styles.container}>
@@ -142,6 +240,11 @@ export default function AlbumDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      {shareFeedback ? (
+        <View style={styles.shareFeedbackWrap}>
+          <Text style={styles.shareFeedback}>{shareFeedback}</Text>
+        </View>
+      ) : null}
       <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
       <Text variant="headlineSmall" style={styles.title}>
         {displayTitle}
@@ -158,69 +261,100 @@ export default function AlbumDetailScreen() {
           {primaryAlbum.year}
         </Text>
       )}
-      {mergedTracks.length > 0 && (
+      {!isGrouped && (
         <View style={styles.albumActions}>
-          <Button
-            mode="contained"
-            icon="play"
-            onPress={() => handlePlayTrack(mergedTracks[0], mergedTracks)}
-            style={styles.playAlbumButton}
-          >
-            Play album
-          </Button>
+          {mergedTracks.length > 0 && (
+            <>
+              <Button
+                mode="contained"
+                icon="play"
+                onPress={() => handlePlayTrack(mergedTracks[0], mergedTracks)}
+                style={styles.playAlbumButton}
+              >
+                Play album
+              </Button>
+              <View style={styles.albumActionRow}>
+                <Button mode="outlined" compact onPress={() => addToQueue(mergedTracks)} style={styles.albumActionBtn}>
+                  Add to queue
+                </Button>
+                <Button mode="outlined" compact onPress={() => playNext(mergedTracks)} style={styles.albumActionBtn}>
+                  Play next
+                </Button>
+              </View>
+            </>
+          )}
           <View style={styles.albumActionRow}>
-            <Button mode="outlined" compact onPress={() => addToQueue(mergedTracks)} style={styles.albumActionBtn}>
-              Add to queue
-            </Button>
-            <Button mode="outlined" compact onPress={() => playNext(mergedTracks)} style={styles.albumActionBtn}>
-              Play next
+            <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
+              Share
             </Button>
           </View>
         </View>
       )}
-      {isGrouped && allTracksByAlbum.length > 1 ? (
-        allTracksByAlbum.map((discTracks, idx) => {
-          if (discTracks.length === 0) return null;
-          const versionAlbum = albums[idx];
-          const versionTitle = versionAlbum?.title ?? `Version ${idx + 1}`;
-          return (
-            <View key={effectiveAlbumIds[idx]} style={styles.discSection}>
-              <View style={styles.discHeader}>
-                <Text variant="titleSmall" style={styles.section} numberOfLines={2}>
-                  {versionTitle}
-                </Text>
-                <Button
-                  mode="outlined"
-                  compact
-                  icon="play"
-                  onPress={() => handlePlayTrack(discTracks[0], discTracks)}
-                  style={styles.discPlayBtn}
-                >
-                  Play
-                </Button>
+      {isGrouped && effectiveAlbumIds.length > 1 ? (
+        <>
+          <View style={styles.albumActions}>
+            <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
+              Share
+            </Button>
+          </View>
+          <Text variant="titleSmall" style={styles.section}>
+            Editions
+          </Text>
+          {allTracksByAlbum.map((discTracks, idx) => {
+            const versionAlbum = albums[idx];
+            const versionTitle = versionAlbum?.title ?? `Version ${idx + 1}`;
+            return (
+              <View key={effectiveAlbumIds[idx]} style={styles.discSection}>
+                <View style={styles.discHeader}>
+                  <Text variant="titleSmall" style={styles.section} numberOfLines={2}>
+                    {versionTitle}
+                  </Text>
+                  {discTracks.length > 0 && (
+                    <View style={styles.discActions}>
+                      <Button
+                        mode="contained"
+                        compact
+                        icon="play"
+                        onPress={() => handlePlayTrack(discTracks[0], discTracks)}
+                        style={styles.discPlayBtn}
+                      >
+                        Play album
+                      </Button>
+                      <View style={styles.discActionRow}>
+                        <Button mode="outlined" compact onPress={() => addToQueue(discTracks)} style={styles.albumActionBtn}>
+                          Add to queue
+                        </Button>
+                        <Button mode="outlined" compact onPress={() => playNext(discTracks)} style={styles.albumActionBtn}>
+                          Play next
+                        </Button>
+                      </View>
+                    </View>
+                  )}
+                </View>
+                {tracksLoading && discTracks.length === 0 ? (
+                  <Text style={styles.muted}>Loading...</Text>
+                ) : (
+                  discTracks.map((t) => {
+                    const isHighlighted = highlightTrackId === t.id;
+                    return (
+                      <TrackRow
+                        key={t.id}
+                        track={t}
+                        albumId={t.album_id}
+                        isHighlighted={isHighlighted}
+                        onPlay={() => handlePlayTrack(t, discTracks)}
+                        onPress={() => handleTrackPress(t)}
+                        addToQueue={addToQueue}
+                        playNext={playNext}
+                        onShare={handleShareTrack}
+                      />
+                    );
+                  })
+                )}
               </View>
-              {tracksLoading ? (
-                <Text style={styles.muted}>Loading...</Text>
-              ) : (
-                discTracks.map((t) => {
-                  const isHighlighted = highlightTrackId === t.id;
-                  return (
-                    <TrackRow
-                      key={t.id}
-                      track={t}
-                      albumId={t.album_id}
-                      isHighlighted={isHighlighted}
-                      onPlay={() => handlePlayTrack(t, discTracks)}
-                      onPress={() => handleTrackPress(t)}
-                      addToQueue={addToQueue}
-                      playNext={playNext}
-                    />
-                  );
-                })
-              )}
-            </View>
-          );
-        })
+            );
+          })}
+        </>
       ) : (
         <>
           <Text variant="titleSmall" style={styles.section}>
@@ -241,6 +375,7 @@ export default function AlbumDetailScreen() {
                   onPress={() => handleTrackPress(t)}
                   addToQueue={addToQueue}
                   playNext={playNext}
+                  onShare={handleShareTrack}
                 />
               );
             })
@@ -304,12 +439,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   discHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 4,
+  },
+  discActions: {
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  discActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
   },
   discPlayBtn: {
     alignSelf: 'center',
@@ -329,5 +473,14 @@ const styles = StyleSheet.create({
   muted: {
     padding: 24,
     color: '#666',
+  },
+  shareFeedbackWrap: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  shareFeedback: {
+    color: '#4ade80',
+    fontSize: 14,
   },
 });
