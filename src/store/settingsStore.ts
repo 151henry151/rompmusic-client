@@ -14,6 +14,8 @@ export interface ClientConfigPolicy {
   client_settings: Record<string, { visible: boolean; default: boolean | string; allowed?: string[] }>;
 }
 
+export type LibrarySortState = { artists: string; albums: string; order: 'asc' | 'desc' };
+
 export interface SettingsState {
   /** Group artists that differ only by capitalization (e.g. "John Coltrane" and "John coltrane"). Default: true */
   groupArtistsByCapitalization: boolean;
@@ -21,11 +23,14 @@ export interface SettingsState {
   albumsArtworkFirst: boolean;
   /** Stream format: original file or OGG transcoded. Default: original */
   streamFormat: StreamFormat;
+  /** Library sort: artists and albums sort keys. Persisted across reload. */
+  librarySort: LibrarySortState;
   /** Server policy for client settings (visibility, defaults). Fetched on login. */
   clientConfig: ClientConfigPolicy | null;
   setGroupArtistsByCapitalization: (value: boolean) => void;
   setAlbumsArtworkFirst: (value: boolean) => void;
   setStreamFormat: (value: StreamFormat) => void;
+  setLibrarySort: (value: LibrarySortState | ((prev: LibrarySortState) => LibrarySortState)) => void;
   setClientConfig: (config: ClientConfigPolicy | null) => void;
   restoreSettings: () => Promise<void>;
   fetchClientConfig: () => Promise<void>;
@@ -42,6 +47,7 @@ const defaults = {
   groupArtistsByCapitalization: true,
   albumsArtworkFirst: true,
   streamFormat: 'original' as StreamFormat,
+  librarySort: { artists: 'name', albums: 'title', order: 'asc' } as LibrarySortState,
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -72,6 +78,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     ).catch(() => {});
   },
 
+  setLibrarySort: (value) => {
+    const next = typeof value === 'function' ? value(get().librarySort) : value;
+    set({ librarySort: next });
+    AsyncStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ ...get(), librarySort: next })
+    ).catch(() => {});
+  },
+
   setClientConfig: (config) => set({ clientConfig: config }),
 
   restoreSettings: async () => {
@@ -83,6 +98,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           groupArtistsByCapitalization: parsed.groupArtistsByCapitalization ?? defaults.groupArtistsByCapitalization,
           albumsArtworkFirst: parsed.albumsArtworkFirst ?? defaults.albumsArtworkFirst,
           streamFormat: (parsed.streamFormat === 'ogg' ? 'ogg' : 'original') as StreamFormat,
+          librarySort: parsed.librarySort && typeof parsed.librarySort === 'object' && typeof parsed.librarySort.artists === 'string' && typeof parsed.librarySort.albums === 'string'
+            ? { ...defaults.librarySort, ...parsed.librarySort, order: parsed.librarySort.order === 'desc' ? 'desc' : 'asc' } as LibrarySortState
+            : defaults.librarySort,
         });
       }
     } catch {

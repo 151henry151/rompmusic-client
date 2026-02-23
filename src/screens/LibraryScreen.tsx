@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, TouchableOpacity, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator, Image } from 'react-native';
+import { ScrollView, StyleSheet, View, TouchableOpacity, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, IconButton, Menu, Divider, List, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -28,6 +28,8 @@ const MOBILE_BREAKPOINT = 600;
 /** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
 const LIBRARY_ARTISTS_PAGE_SIZE = 80;
 const LIBRARY_ALBUMS_PAGE_SIZE = 80;
+/** When sort is Random, fetch one large page (no pagination) so each refresh gives a single new random order. */
+const LIBRARY_ALBUMS_RANDOM_LIMIT = 500;
 const LIBRARY_TRACKS_PAGE_SIZE = 1000;
 
 /** Full A–Z + # for the section index when sorted alphabetically (always show all letters). */
@@ -50,6 +52,7 @@ const ALBUM_SORTS = [
   { value: 'date_added', label: 'Date added' },
   { value: 'artist', label: 'Artist name' },
   { value: 'title', label: 'Album title' },
+  { value: 'random', label: 'Random' },
 ];
 
 
@@ -176,13 +179,19 @@ const sectionIndexStyles = StyleSheet.create({
 
 export default function LibraryScreen() {
   const [tab, setTab] = useState<TabType>('albums');
-  const [sortBy, setSortBy] = useState({ artists: 'name', albums: 'title' });
-  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const librarySort = useSettingsStore((s) => s.librarySort);
+  const setLibrarySort = useSettingsStore((s) => s.setLibrarySort);
+  const sortBy = { artists: librarySort.artists, albums: librarySort.albums };
+  const setSortBy = (fn: (s: { artists: string; albums: string }) => { artists: string; albums: string }) =>
+    setLibrarySort((prev) => ({ ...prev, ...fn({ artists: prev.artists, albums: prev.albums }) }));
+  const order = librarySort.order;
+  const setOrder = (o: 'asc' | 'desc') => setLibrarySort((prev) => ({ ...prev, order: o }));
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [tabMenuVisible, setTabMenuVisible] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSuggestQuery, setDebouncedSuggestQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSuggestQuery(searchInput.trim()), 300);
@@ -220,6 +229,7 @@ export default function LibraryScreen() {
     fetchNextPage: fetchMoreArtists,
     hasNextPage: hasMoreArtists,
     isFetchingNextPage: artistsLoadingMore,
+    refetch: refetchArtists,
   } = useInfiniteQuery({
     queryKey: ['artists', sortBy.artists, order, searchQuery],
     queryFn: ({ pageParam }) =>
@@ -252,6 +262,8 @@ export default function LibraryScreen() {
     }
     return { groupedArtists: groups };
   }, [artistsRaw, groupArtistsByCapitalization, groupCollaborationsByPrimary]);
+  const isAlbumsRandomSort = sortBy.albums === 'random';
+  const albumsLimit = isAlbumsRandomSort ? LIBRARY_ALBUMS_RANDOM_LIMIT : LIBRARY_ALBUMS_PAGE_SIZE;
   const {
     data: albumsData,
     isLoading: albumsLoading,
@@ -259,22 +271,38 @@ export default function LibraryScreen() {
     fetchNextPage: fetchMoreAlbums,
     hasNextPage: hasMoreAlbums,
     isFetchingNextPage: albumsLoadingMore,
+    refetch: refetchAlbums,
   } = useInfiniteQuery({
     queryKey: ['albums', sortBy.albums, order, searchQuery, albumsArtworkFirst],
     queryFn: ({ pageParam }) =>
       api.getAlbums({
         skip: pageParam,
-        limit: LIBRARY_ALBUMS_PAGE_SIZE,
-        sort_by: sortBy.albums,
-        order,
+        limit: albumsLimit,
+        sort_by: isAlbumsRandomSort ? undefined : sortBy.albums,
+        order: isAlbumsRandomSort ? undefined : order,
+        random: isAlbumsRandomSort,
         search: searchQuery || undefined,
         artwork_first: albumsArtworkFirst,
       }),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      (lastPage as unknown[]).length === LIBRARY_ALBUMS_PAGE_SIZE ? allPages.length * LIBRARY_ALBUMS_PAGE_SIZE : undefined,
+    getNextPageParam: isAlbumsRandomSort
+      ? () => undefined
+      : (lastPage, allPages) =>
+          (lastPage as unknown[]).length === LIBRARY_ALBUMS_PAGE_SIZE ? allPages.length * LIBRARY_ALBUMS_PAGE_SIZE : undefined,
     enabled: !searchQuery,
   });
+  // When on albums + random sort, refetch on mount so a full page reload gives a new random set
+  const hasRefetchedRandomRef = useRef(false);
+  useEffect(() => {
+    if (tab === 'albums' && isAlbumsRandomSort) {
+      if (!hasRefetchedRandomRef.current) {
+        hasRefetchedRandomRef.current = true;
+        refetchAlbums();
+      }
+    } else {
+      hasRefetchedRandomRef.current = false;
+    }
+  }, [tab, isAlbumsRandomSort, refetchAlbums]);
   const albumsRaw = albumsData?.pages.flat() ?? [];
   const albums = albumsRaw;
   const albumGroups = useMemo(() => {
@@ -455,7 +483,7 @@ export default function LibraryScreen() {
 
   const artistsByLetter = useMemo(() => groupByFirstLetter(groupedArtists, (g) => g.displayName), [groupedArtists]);
   const albumsByLetter = useMemo(() => {
-    if (sortBy.albums === 'year' || sortBy.albums === 'date_added') return null;
+    if (sortBy.albums === 'year' || sortBy.albums === 'date_added' || sortBy.albums === 'random') return null;
     const byLetter = groupByFirstLetter(
       albumGroups,
       sortBy.albums === 'artist' ? (g) => g.artistNames : (g) => g.displayTitle
@@ -468,7 +496,7 @@ export default function LibraryScreen() {
   const sectionKeys = useMemo(() => {
     if (tab === 'artists') return FULL_ALPHABET;
     if (tab === 'albums') {
-      if (sortBy.albums === 'date_added') return [];
+      if (sortBy.albums === 'date_added' || sortBy.albums === 'random') return [];
       if (albumsGroupedByDecade) return DECADE_LABELS;
       return FULL_ALPHABET;
     }
@@ -644,6 +672,16 @@ export default function LibraryScreen() {
     ]
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (tab === 'artists') await refetchArtists();
+      else await refetchAlbums();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [tab, refetchArtists, refetchAlbums]);
+
   const handleAlbumPress = (group: { albumIds: number[] }) => {
     if (group.albumIds.length === 1) {
       navigation.navigate('AlbumDetail', { albumId: group.albumIds[0] });
@@ -714,15 +752,19 @@ export default function LibraryScreen() {
           titleStyle={{ color: currentSortBy === opt.value ? '#4a9eff' : '#fff' }}
         />
       ))}
-      <Divider />
-      <Menu.Item
-        onPress={() => {
-          setOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
-          setSortMenuVisible(false);
-        }}
-        title={order === 'asc' ? '↑ Ascending' : '↓ Descending'}
-        titleStyle={{ color: '#888' }}
-      />
+      {!(tab === 'albums' && currentSortBy === 'random') && (
+        <>
+          <Divider />
+          <Menu.Item
+            onPress={() => {
+              setOrder(order === 'asc' ? 'desc' : 'asc');
+              setSortMenuVisible(false);
+            }}
+            title={order === 'asc' ? '↑ Ascending' : '↓ Descending'}
+            titleStyle={{ color: '#888' }}
+          />
+        </>
+      )}
     </Menu>
   );
 
@@ -1026,6 +1068,13 @@ export default function LibraryScreen() {
           scrollEventThrottle={32}
           style={styles.scrollContent}
           contentContainerStyle={{ paddingBottom: 24 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#4a9eff"
+            />
+          }
         >
           <View ref={scrollContentRef} collapsable={false}>
       {anyLoading && (searchQuery ? true : artistsRaw.length === 0 && albumsRaw.length === 0) && (

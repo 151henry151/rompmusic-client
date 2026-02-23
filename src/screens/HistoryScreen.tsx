@@ -21,12 +21,14 @@ export default function HistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'History'>>();
   const playTrack = usePlayerStore((s) => s.playTrack);
 
-  const { data: tracks, isLoading } = useQuery({
+  const { data: tracks, isLoading, isError, error } = useQuery({
     queryKey: ['recently-played'],
     queryFn: () => api.getRecentlyPlayed(100),
+    retry: false,
   });
 
   const list = (tracks || []) as (Track & { album_title?: string; artist_name?: string })[];
+  const is401 = isError && error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'));
 
   const handleTrackPress = (track: Track & { album_title?: string; artist_name?: string }) => {
     playTrack(track, list);
@@ -57,8 +59,14 @@ export default function HistoryScreen() {
         {isLoading && (
           <Text style={styles.muted}>Loading…</Text>
         )}
-        {!isLoading && list.length === 0 && (
+        {!isLoading && is401 && (
+          <Text style={styles.muted}>Sign in to see your play history, or ask your server admin to enable public access (cookie-based play history).</Text>
+        )}
+        {!isLoading && !isError && list.length === 0 && (
           <Text style={styles.muted}>No play history. Play some tracks to see them here.</Text>
+        )}
+        {!isLoading && isError && !is401 && (
+          <Text style={styles.muted}>Could not load play history. Try again later.</Text>
         )}
         {list.length > 0 && list.map((t) => (
           <List.Item
