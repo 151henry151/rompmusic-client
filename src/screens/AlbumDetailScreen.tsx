@@ -13,7 +13,7 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
-import { getAlbumDisplayTitle } from '../utils/albumGrouping';
+import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
 
 type AlbumDetailParams = { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
 type RootStackParamList = {
@@ -126,13 +126,32 @@ export default function AlbumDetailScreen() {
       }),
     [trackQueries]
   );
-  const mergedTracks = useMemo(() => {
-    const out: (Track & { album_title?: string; artist_name?: string })[] = [];
-    allTracksByAlbum.forEach((arr) => out.push(...arr));
-    return dedupeTracks(out).sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
-  }, [allTracksByAlbum]);
 
   const primaryAlbum = albums[0];
+  /** When we have multiple album IDs but they're the same release (same base title + year), show as one album to avoid fake "editions". */
+  const showAsSingleRelease = useMemo(() => {
+    if (!isGrouped || albums.length <= 1) return false;
+    const firstKey = getBaseReleaseKey(albums[0].title, albums[0].year);
+    return albums.every((a) => getBaseReleaseKey(a.title, a.year) === firstKey);
+  }, [isGrouped, albums]);
+
+  /** Merge tracks from all editions. When same release, merge by (disc, track) slot so we show full tracklist even if editions share track ids. */
+  const mergedTracks = useMemo(() => {
+    const out: (Track & { album_title?: string; artist_name?: string })[] = [];
+    if (showAsSingleRelease) {
+      const bySlot = new Map<string, Track & { album_title?: string; artist_name?: string }>();
+      for (const arr of allTracksByAlbum) {
+        for (const t of arr) {
+          const slot = `${t.disc_number}|${t.track_number}`;
+          if (!bySlot.has(slot)) bySlot.set(slot, t);
+        }
+      }
+      out.push(...bySlot.values());
+    } else {
+      allTracksByAlbum.forEach((arr) => out.push(...arr));
+    }
+    return dedupeTracks(out).sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
+  }, [allTracksByAlbum, showAsSingleRelease]);
   const displayTitle = primaryAlbum ? (isGrouped ? getAlbumDisplayTitle(primaryAlbum.title) : primaryAlbum.title) : '';
   const artistNames = primaryAlbum
     ? (isGrouped ? [...new Set(albums.map((a) => a.artist_name || 'Unknown'))].join(', ') : (primaryAlbum.artist_name || 'Unknown'))
@@ -261,7 +280,7 @@ export default function AlbumDetailScreen() {
           {primaryAlbum.year}
         </Text>
       )}
-      {!isGrouped && (
+      {(!isGrouped || showAsSingleRelease) && (
         <View style={styles.albumActions}>
           {mergedTracks.length > 0 && (
             <>
@@ -290,7 +309,7 @@ export default function AlbumDetailScreen() {
           </View>
         </View>
       )}
-      {isGrouped && effectiveAlbumIds.length > 1 ? (
+      {isGrouped && !showAsSingleRelease && effectiveAlbumIds.length > 1 ? (
         <>
           <View style={styles.albumActions}>
             <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
@@ -460,6 +479,8 @@ const styles = StyleSheet.create({
   },
   trackItem: {
     backgroundColor: '#1a1a1a',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   highlightedTrack: {
     backgroundColor: '#2a3a4a',

@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (Changes since last release will be listed here)
+- **Random album sort** - New Random option in Library album sort; each refresh or pull-to-refresh gives a new random order.
+- **Pull-to-refresh on Library** - Swipe down to refresh the list (Artists or Albums tab).
+- **Server URL first-run and Settings** — When no server URL is stored and EXPO_PUBLIC_API_URL is not set (e.g. native apps), first run shows "Connect to your server"; user enters server URL and continues. Settings has Server URL with edit dialog; changing it clears session so user logs in again to the new server.
+
+### Changed
+
+- **Merged albums (e.g. Doo-Bop)** — Navigation passes albumId and albumIds so URL is stable (/album/3143); deep link parses albumIds query. Merged tracks by (disc_number, track_number) only for full track list across editions. Single "Play album" plays one queue; no multiple tracks at once.
+- **Player** — All active AudioPlayer instances tracked in a set; playTrack calls stopAndRemoveAllPlayers() before starting so no orphaned players keep playing. Pause then remove on teardown; single active player so pause stops the only track.
+
+### Fixed
+
+- **Play album / multiple tracks** — Clicking "Play album" could start multiple tracks and pause only stopped one; fixed by stopping and removing every active player before starting new playback.
 
 ## [0.1.0-beta.6] - 2026-02-19
 
@@ -98,4 +109,11 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Gapless playback support
 - Library, search, and player screens
 - JWT authentication
+
+po app for Android, iOS, and web
+- Gapless playback support
+- Library, search, and player screens
+- JWT authentication
+
+on
 

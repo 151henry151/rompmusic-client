@@ -683,10 +683,11 @@ export default function LibraryScreen() {
   }, [tab, refetchArtists, refetchAlbums]);
 
   const handleAlbumPress = (group: { albumIds: number[] }) => {
-    if (group.albumIds.length === 1) {
-      navigation.navigate('AlbumDetail', { albumId: group.albumIds[0] });
+    const ids = group.albumIds;
+    if (ids.length === 1) {
+      navigation.navigate('AlbumDetail', { albumId: ids[0] });
     } else {
-      navigation.navigate('AlbumDetail', { albumIds: group.albumIds });
+      navigation.navigate('AlbumDetail', { albumId: ids[0], albumIds: ids });
     }
   };
 

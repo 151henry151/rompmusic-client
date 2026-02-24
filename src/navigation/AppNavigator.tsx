@@ -166,7 +166,7 @@ export default function AppNavigator() {
     ? {
         prefixes: [window.location.origin + '/' + webBasePath, '/' + webBasePath],
         config: linkingConfig,
-        // Web passes full pathname (e.g. "/app/album/2936"); strip base so default parser gets "album/2936"
+        // Web passes full pathname (e.g. "/app/album/2936"); strip base and parse query for albumIds
         getStateFromPath(path: string, options?: object) {
           const { getStateFromPath: defaultGetStateFromPath } = require('@react-navigation/native');
           let normalized = path.replace(/^\/+/, '');
@@ -176,7 +176,22 @@ export default function AppNavigator() {
           } else if (normalized === base) {
             normalized = '';
           }
-          return defaultGetStateFromPath(normalized, (options as object) ?? linkingConfig);
+          const [pathPart, queryPart] = normalized.split('?');
+          let state = defaultGetStateFromPath(pathPart, (options as object) ?? linkingConfig);
+          if (queryPart && state?.routes) {
+            const q = new URLSearchParams(queryPart);
+            const albumIdsParam = q.get('albumIds');
+            if (albumIdsParam) {
+              const albumIds = albumIdsParam.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !Number.isNaN(n));
+              const appRoute = state.routes.find((r: { name: string }) => r.name === 'App');
+              const appState = appRoute?.state as { routes?: { name: string; params?: Record<string, unknown> }[] } | undefined;
+              const albumDetail = appState?.routes?.find((r) => r.name === 'AlbumDetail');
+              if (albumDetail?.params && albumIds.length > 0) {
+                albumDetail.params = { ...albumDetail.params, albumIds, albumId: albumIds[0] };
+              }
+            }
+          }
+          return state;
         },
       }
     : undefined;

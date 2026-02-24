@@ -76,6 +76,42 @@ let sound: AudioPlayer | null = null;
 let nextSound: AudioPlayer | null = null;
 /** True after we've prestarted nextSound (play at volume 0); reset when we promote. */
 let prestartedNext = false;
+/** All active players so we can stop every one before starting new playback (avoids multiple tracks playing). */
+const activePlayers = new Set<AudioPlayer>();
+
+function stopAndRemoveAllPlayers(): void {
+  for (const p of activePlayers) {
+    try {
+      p.pause();
+    } catch {
+      /* ignore */
+    }
+    try {
+      p.remove();
+    } catch {
+      /* ignore */
+    }
+    activePlayers.delete(p);
+  }
+  sound = null;
+  nextSound = null;
+  prestartedNext = false;
+}
+
+function removePlayer(p: AudioPlayer | null): void {
+  if (!p) return;
+  try {
+    p.pause();
+  } catch {
+    /* ignore */
+  }
+  try {
+    p.remove();
+  } catch {
+    /* ignore */
+  }
+  activePlayers.delete(p);
+}
 
 function getStreamUrl(track: Track): string {
   const format = getStreamFormat();
@@ -94,6 +130,7 @@ function loadAndPlay(
 ): AudioPlayer {
   const url = getStreamUrl(track);
   const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: false });
+  activePlayers.add(player);
   player.volume = currentVolume;
   if (position > 0) {
     player.seekTo(position);
@@ -126,7 +163,9 @@ function loadAndPlay(
 function preloadNext(track: Track): AudioPlayer | null {
   try {
     const url = getStreamUrl(track);
-    return createAudioPlayer(url, { updateInterval: 150, downloadFirst: true });
+    const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: true });
+    activePlayers.add(player);
+    return player;
   } catch {
     return null;
   }
@@ -265,8 +304,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const state = get();
       if (state.currentIndex + 1 >= state.queue.length) {
         setLockScreenMetadata(sound ?? null, null);
-        sound?.remove();
-        nextSound?.remove();
+        removePlayer(sound ?? null);
+        removePlayer(nextSound);
         sound = null;
         nextSound = null;
         prestartedNext = false;
@@ -281,7 +320,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (preloaded) {
       nextSound = null;
       prestartedNext = false;
-      sound?.remove();
+      removePlayer(sound);
       sound = preloaded;
       // If we prestarted 15s before end, the track may have been playing silently; ensure we're at the start when we unmute.
       await sound.seekTo(0);
@@ -310,7 +349,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       if (nextNext) nextSound = preloadNext(nextNext);
     } else {
       prestartedNext = false;
-      sound?.remove();
+      removePlayer(sound);
       sound = loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
       setLockScreenMetadata(sound, nextTrack);
     }
@@ -326,8 +365,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     if (currentIndex <= 0) return;
     const prevTrack = queue[currentIndex - 1];
-    sound?.remove();
-    nextSound?.remove();
+    removePlayer(sound);
+    removePlayer(nextSound);
     nextSound = null;
     prestartedNext = false;
     sound = loadAndPlay(prevTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
@@ -336,11 +375,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playTrack: async (track, queue = []) => {
-    sound?.remove();
-    sound = null;
-    nextSound?.remove();
-    nextSound = null;
-    prestartedNext = false;
+    stopAndRemoveAllPlayers();
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;
@@ -355,7 +390,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   playNext: (tracks) => {
     const arr = Array.isArray(tracks) ? tracks : [tracks];
-    nextSound?.remove();
+    removePlayer(nextSound);
     nextSound = null;
     prestartedNext = false;
     set((s) => {

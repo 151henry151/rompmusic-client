@@ -90,6 +90,14 @@ function baseTitleForMerge(title: string): string {
 }
 
 /**
+ * Key for "same release" detection: same base title (strip disc + edition) and year.
+ * When multiple albums in a group share this key, show as one album (e.g. Doo-Bop with duplicate DB rows).
+ */
+export function getBaseReleaseKey(title: string, year?: number | null): string {
+  return `${normalizeTitleForGrouping(title)}|${year ?? ''}`;
+}
+
+/**
  * Group albums by same artwork when hash is set; otherwise by primary artist + title + year
  * so that collaboration variants (e.g. "All. Right. Now." by Satsang vs Satsang/G. Love) and
  * multi-artist same-title albums (e.g. "Amy") merge into one entry.
