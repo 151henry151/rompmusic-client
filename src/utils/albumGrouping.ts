@@ -37,6 +37,8 @@ const EDITION_SUFFIX_PATTERNS = [
   /\s*\((?:deluxe\s*edition|deluxe|bonus\s*tracks?|expanded\s*edition|expanded|special\s*edition|anniversary\s*edition|remaster(?:ed)?|reissue)\)\s*$/i,
   /\s*\[(?:bonus\s*tracks?|deluxe\s*edition|deluxe|expanded\s*edition|expanded)\]\s*$/i,
   /\s*[-–]\s*(?:deluxe\s*edition|deluxe|bonus\s*tracks?|expanded\s*edition)\s*$/i,
+  // Format/medium so "Doo-Bop (CD)", "Doo-Bop (Vinyl)" etc. show as one release
+  /\s*\((?:cd|vinyl|lp|cassette|digital|streaming)\)\s*$/i,
 ];
 
 function stripDiscSuffix(title: string): string {

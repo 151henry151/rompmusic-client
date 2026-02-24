@@ -402,6 +402,10 @@ export default function LibraryScreen() {
     staleTime: 60 * 1000,
   });
   const searchResults = searchResultsData ?? { artists: [], albums: [], tracks: [] };
+  const searchAlbumGroups = useMemo(
+    () => groupAlbumsByArtwork((searchResults.albums || []) as { id: number; title: string; artist_name?: string; year?: number | null; has_artwork?: boolean | null; artwork_hash?: string | null }[]),
+    [searchResults.albums]
+  );
 
   useEffect(() => {
     if (searchQuery) return;
@@ -1139,7 +1143,7 @@ export default function LibraryScreen() {
       {searchQuery && !searchResultsLoading && (
         <View style={styles.searchResultsSection}>
           {(searchResults.artists?.length ?? 0) === 0 &&
-           (searchResults.albums?.length ?? 0) === 0 &&
+           (searchAlbumGroups?.length ?? 0) === 0 &&
            (searchResults.tracks?.length ?? 0) === 0 ? (
             <View style={styles.loadingWrap}>
               <Text variant="bodyLarge" style={styles.loadingText}>No results for “{searchQuery}”</Text>
@@ -1161,16 +1165,16 @@ export default function LibraryScreen() {
                   ))}
                 </>
               )}
-              {(searchResults.albums?.length ?? 0) > 0 && (
+              {(searchAlbumGroups?.length ?? 0) > 0 && (
                 <>
                   <Text variant="labelLarge" style={styles.searchResultsSectionTitle}>Albums</Text>
-                  {(searchResults.albums || []).map((a: { id: number; title: string; artist_name?: string }) => (
+                  {searchAlbumGroups.map((g) => (
                     <List.Item
-                      key={`res-album-${a.id}`}
-                      title={a.title}
-                      description={a.artist_name}
-                      left={() => <ArtworkImage type="album" id={a.id} size={48} borderRadius={6} style={styles.searchResultArtwork} defer />}
-                      onPress={() => clearSearchAndNavigate(() => navigation.navigate('AlbumDetail', { albumId: a.id }))}
+                      key={`res-album-${g.albumIds.join('-')}`}
+                      title={g.displayTitle}
+                      description={g.artistNames}
+                      left={() => <ArtworkImage type="album" id={g.primaryAlbum.id} size={48} borderRadius={6} style={styles.searchResultArtwork} defer />}
+                      onPress={() => clearSearchAndNavigate(() => navigation.navigate('AlbumDetail', { albumId: g.albumIds[0], albumIds: g.albumIds }))}
                       right={(props) => <List.Icon {...props} icon="chevron-right" />}
                       style={styles.searchResultItem}
                     />

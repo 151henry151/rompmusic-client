@@ -160,9 +160,23 @@ export default function AlbumDetailScreen() {
   const isLoading = albumQueries.some((q) => q.isLoading) || (effectiveAlbumIds.length > 0 && albums.length === 0);
   const tracksLoading = trackQueries.some((q) => q.isLoading);
 
-  const handlePlayTrack = async (track: Track, queue?: Track[]) => {
-    await playTrack(track, queue || mergedTracks);
-  };
+  const playAlbumInProgress = React.useRef(false);
+  const handlePlayTrack = useCallback(
+    async (track: Track, queue?: Track[]) => {
+      const q = queue ?? mergedTracks;
+      // Prevent "Play album" from firing multiple times (e.g. overlapping touch targets when multiple editions)
+      if (q.length > 1 && track.id === q[0].id && playAlbumInProgress.current) return;
+      if (q.length > 1 && track.id === q[0].id) playAlbumInProgress.current = true;
+      try {
+        await playTrack(track, q);
+      } finally {
+        setTimeout(() => {
+          playAlbumInProgress.current = false;
+        }, 600);
+      }
+    },
+    [mergedTracks, playTrack]
+  );
 
   const handleTrackPress = (track: Track) => {
     navigation.navigate('TrackDetail', { trackId: track.id });

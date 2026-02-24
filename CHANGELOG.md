@@ -11,16 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Random album sort** - New Random option in Library album sort; each refresh or pull-to-refresh gives a new random order.
 - **Pull-to-refresh on Library** - Swipe down to refresh the list (Artists or Albums tab).
-- **Server URL first-run and Settings** — When no server URL is stored and EXPO_PUBLIC_API_URL is not set (e.g. native apps), first run shows "Connect to your server"; user enters server URL and continues. Settings has Server URL with edit dialog; changing it clears session so user logs in again to the new server.
+
+## [0.1.0-beta.8] - 2026-02-23
 
 ### Changed
 
-- **Merged albums (e.g. Doo-Bop)** — Navigation passes albumId and albumIds so URL is stable (/album/3143); deep link parses albumIds query. Merged tracks by (disc_number, track_number) only for full track list across editions. Single "Play album" plays one queue; no multiple tracks at once.
-- **Player** — All active AudioPlayer instances tracked in a set; playTrack calls stopAndRemoveAllPlayers() before starting so no orphaned players keep playing. Pause then remove on teardown; single active player so pause stops the only track.
-
-### Fixed
-
-- **Play album / multiple tracks** — Clicking "Play album" could start multiple tracks and pause only stopped one; fixed by stopping and removing every active player before starting new playback.
+- **Search results** — Library search bar and Search screen: album results grouped like Library albums (groupAlbumsByArtwork); one row per group, navigate with albumIds for merged view.
+- **Edition suffixes** — (CD), (Vinyl), (LP), (Cassette), (Digital), (Streaming) stripped for “same release” so e.g. Doo-Bop shows as one album. “Play album” guard prevents multiple starts.
 
 ## [0.1.0-beta.6] - 2026-02-19
 

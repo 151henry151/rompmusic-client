@@ -13,10 +13,11 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import { groupArtistsByNormalizedName } from '../utils/artistMerge';
+import { groupAlbumsByArtwork } from '../utils/albumGrouping';
 
 type RootStackParamList = {
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
-  AlbumDetail: { albumId: number; highlightTrackId?: number };
+  AlbumDetail: { albumId: number; albumIds?: number[]; highlightTrackId?: number };
   TrackDetail: { trackId: number };
 };
 
@@ -33,6 +34,10 @@ export default function SearchScreen() {
   const groupedSearchArtists = useMemo(
     () => groupArtistsByNormalizedName(data?.artists || []),
     [data?.artists]
+  );
+  const groupedSearchAlbums = useMemo(
+    () => groupAlbumsByArtwork((data?.albums || []) as { id: number; title: string; artist_name?: string; year?: number | null; has_artwork?: boolean | null; artwork_hash?: string | null }[]),
+    [data?.albums]
   );
 
   const handlePlayTrack = async (trackId: number) => {
@@ -90,28 +95,28 @@ export default function SearchScreen() {
       )}
 
       {/* Albums */}
-      {data?.albums?.length > 0 && (
+      {groupedSearchAlbums.length > 0 && (
         <>
           <Text variant="titleSmall" style={styles.section}>
             Albums
           </Text>
-          {(data.albums || []).map((a: { id: number; title: string; artist_id?: number; artist_name?: string }) => (
+          {groupedSearchAlbums.map((g) => (
             <List.Item
-              key={`album-${a.id}`}
-              title={a.title}
+              key={`album-${g.albumIds.join('-')}`}
+              title={g.displayTitle}
               description={
-                a.artist_name ? (
-                  <Text variant="bodySmall" style={styles.link} onPress={(e) => { e?.stopPropagation?.(); a.artist_id != null && navigation.navigate('ArtistDetail', { artistIds: [a.artist_id], artistName: a.artist_name }); }}>
-                    {a.artist_name}
+                g.artistNames ? (
+                  <Text variant="bodySmall" style={styles.link} onPress={(e) => { e?.stopPropagation?.(); if (g.primaryAlbum.artist_id != null) navigation.navigate('ArtistDetail', { artistIds: [g.primaryAlbum.artist_id], artistName: g.artistNames }); }}>
+                    {g.artistNames}
                   </Text>
                 ) : undefined
               }
-              left={() => <ArtworkImage type="album" id={a.id} size={48} style={styles.artwork} />}
-              onPress={() => navigation.navigate('AlbumDetail', { albumId: a.id })}
+              left={() => <ArtworkImage type="album" id={g.primaryAlbum.id} size={48} style={styles.artwork} />}
+              onPress={() => navigation.navigate('AlbumDetail', { albumId: g.albumIds[0], albumIds: g.albumIds })}
               right={(props) => <List.Icon {...props} icon="chevron-right" />}
               style={styles.item}
               accessibilityRole="button"
-              accessibilityLabel={`View album ${a.title}`}
+              accessibilityLabel={`View album ${g.displayTitle}`}
             />
           ))}
         </>
