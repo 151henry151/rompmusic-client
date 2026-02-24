@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **Random album sort** - New Random option in Library album sort; each refresh or pull-to-refresh gives a new random order.
-- **Pull-to-refresh on Library** - Swipe down to refresh the list (Artists or Albums tab).
+- (Changes since last release will be listed here)
 
 ## [0.1.0-beta.8] - 2026-02-23
+
+### Added
+
+- **Random album sort** — New Random option in Library album sort; each refresh or pull-to-refresh gives a new random order.
+- **Pull-to-refresh on Library** — Swipe down to refresh the list (Artists or Albums tab).
 
 ### Changed
 
