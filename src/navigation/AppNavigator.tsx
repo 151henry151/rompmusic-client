@@ -225,3 +225,10 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+        <RootStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+        <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <RootStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      </RootStack.Navigator>
+    </NavigationContainer>
+  );
+}

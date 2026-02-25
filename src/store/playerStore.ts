@@ -375,12 +375,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playTrack: async (track, queue = []) => {
-    stopAndRemoveAllPlayers();
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;
     set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration, autoplayStartIndex: null });
-    await get().play();
+    // On web (especially iOS Safari): do not pause/remove existing players before play(). Touching
+    // media elements in the same tick as the user gesture can cause the new play() to be blocked.
+    // Clear refs so play() creates a new player, start playback in this tick, then remove stale players.
+    if (Platform.OS === 'web') {
+      clearCurrentPlayerRefs();
+      get().play().catch((e) => {
+        set({ isLoading: false, error: e instanceof Error ? e.message : 'Playback failed' });
+      });
+      setTimeout(removeStalePlayers, 0);
+    } else {
+      stopAndRemoveAllPlayers();
+      get().play().catch((e) => {
+        set({ isLoading: false, error: e instanceof Error ? e.message : 'Playback failed' });
+      });
+    }
   },
 
   addToQueue: (tracks) => {

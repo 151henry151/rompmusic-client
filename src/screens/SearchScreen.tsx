@@ -40,9 +40,9 @@ export default function SearchScreen() {
     [data?.albums]
   );
 
-  const handlePlayTrack = async (trackId: number) => {
+  const handlePlayTrack = (trackId: number) => {
     const track = (data?.tracks || []).find((t: { id: number }) => t.id === trackId);
-    if (track) await playTrack(track, data?.tracks || []);
+    if (track) playTrack(track, data?.tracks || []);
   };
 
   const handleTrackPress = (trackId: number) => {

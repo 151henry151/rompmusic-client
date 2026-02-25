@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.0-beta.9] - 2026-02-16
+
+### Changed
+
+- **Web URL and reload** — Custom `getPathFromState` in linking always prepends the web base path (e.g. `/app`) so the address bar stays at `rompmusic.com/app`, `rompmusic.com/app/Library`, etc. Reload and hard reload no longer send you to the landing page; you stay on the same app screen.
+- **iOS Safari playback** — On web, `playTrack` no longer calls `stopAndRemoveAllPlayers()` before `play()` in the same tick; it clears current player refs and defers `removeStalePlayers` so the user gesture is preserved and `audio.play()` is not blocked. Album detail and Search “Play” handlers call `playTrack` synchronously for the same reason.
+
 ## [0.1.0-beta.8] - 2026-02-23
 
 ### Added
