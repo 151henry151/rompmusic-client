@@ -114,12 +114,6 @@ function removePlayer(p: AudioPlayer | null): void {
   activePlayers.delete(p);
 }
 
-function clearCurrentPlayerRefs(): void {
-  sound = null;
-  nextSound = null;
-  prestartedNext = false;
-}
-
 function removeStalePlayers(): void {
   const keep = sound;
   const keepNext = nextSound;
@@ -456,24 +450,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           }));
           const startIndex = get().queue.length;
           set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-  },
-}));
-}));
-          const startIndex = get().queue.length;
-          set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-  },
-}));
-s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
         }
       } catch {
         /* ignore */
