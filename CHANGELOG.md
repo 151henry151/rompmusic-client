@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.0-beta.11] - 2026-02-26
+
+### Changed
+
+- **Album grouping** — `groupAlbumsByArtwork` fallback key is now title + year only (not primary artist + title + year). Multi-artist same release (e.g. "Doo-Bop" with "Miles Davis" and "Miles Davis Feat. Easy Mo Bee") shows as one album in search and library.
+
 ## [0.1.0-beta.10] - 2026-02-16
 
 ### Fixed
