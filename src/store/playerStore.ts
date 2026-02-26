@@ -158,10 +158,17 @@ function loadAndPlay(
     }
     const dur = status.duration ?? 0;
     const pos = status.currentTime ?? 0;
-    if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
-      prestartedNext = true;
-      nextSound.volume = 0;
-      nextSound.play();
+    if (dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
+      if (Platform.OS === 'web' && !nextSound) {
+        const { queue, currentIndex } = get();
+        const nxt = queue[currentIndex + 1];
+        if (nxt) nextSound = preloadNext(nxt);
+      }
+      if (!prestartedNext && nextSound) {
+        prestartedNext = true;
+        nextSound.volume = 0;
+        nextSound.play();
+      }
     }
     const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
     if (!finished && (status.didJustFinish || atEnd)) {
@@ -262,7 +269,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
         sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
         setLockScreenMetadata(sound, currentTrack);
-        if (nextTrack) nextSound = preloadNext(nextTrack);
+        // On web, defer preloading next track until prestart window to avoid creating a second
+        // player (and its async replace()) while the first is loading — that can abort the first fetch.
+        if (nextTrack && Platform.OS !== 'web') nextSound = preloadNext(nextTrack);
         // Keep isLoading true until onPlaybackStarted fires (stream has started)
       }
     } catch (e) {
@@ -343,10 +352,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ position: status.currentTime });
         const dur = status.duration ?? 0;
         const pos = status.currentTime ?? 0;
-        if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
-          prestartedNext = true;
-          nextSound.volume = 0;
-          nextSound.play();
+        if (dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
+          if (Platform.OS === 'web' && !nextSound) {
+            const { queue, currentIndex } = get();
+            const nxt = queue[currentIndex + 1];
+            if (nxt) nextSound = preloadNext(nxt);
+          }
+          if (!prestartedNext && nextSound) {
+            prestartedNext = true;
+            nextSound.volume = 0;
+            nextSound.play();
+          }
         }
         const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
         if (!finished && (status.didJustFinish || atEnd)) {
@@ -359,7 +375,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       setLockScreenMetadata(sound, nextTrack);
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
-      if (nextNext) nextSound = preloadNext(nextNext);
+      if (nextNext && Platform.OS !== 'web') nextSound = preloadNext(nextNext);
     } else {
       prestartedNext = false;
       removePlayer(sound);
