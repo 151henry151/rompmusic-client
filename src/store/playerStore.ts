@@ -29,6 +29,7 @@ function getStreamFormat(): 'original' | 'ogg' {
 
 /** Start prestarting (play next at volume 0) this many seconds before end so it has time to load. Load time can be ~12s with transcoding or slow networks. */
 const PRESTART_BEFORE_END_SEC = 15;
+function clearCurrentPlayerRefs(): void { sound = null; nextSound = null; prestartedNext = false; }
 /** Consider track ended and promote next this many seconds before actual end (short overlap for gapless). */
 const PROMOTE_BEFORE_END_SEC = 0.02;
 
@@ -111,6 +112,24 @@ function removePlayer(p: AudioPlayer | null): void {
     /* ignore */
   }
   activePlayers.delete(p);
+}
+
+function clearCurrentPlayerRefs(): void {
+  sound = null;
+  nextSound = null;
+  prestartedNext = false;
+}
+
+function removeStalePlayers(): void {
+  const keep = sound;
+  const keepNext = nextSound;
+  for (const p of Array.from(activePlayers)) {
+    if (p !== keep && p !== keepNext) {
+      try { p.pause(); } catch { }
+      try { p.remove(); } catch { }
+      activePlayers.delete(p);
+    }
+  }
 }
 
 function getStreamUrl(track: Track): string {
@@ -375,25 +394,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playTrack: async (track, queue = []) => {
+    stopAndRemoveAllPlayers();
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;
     set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration, autoplayStartIndex: null });
-    // On web (especially iOS Safari): do not pause/remove existing players before play(). Touching
-    // media elements in the same tick as the user gesture can cause the new play() to be blocked.
-    // Clear refs so play() creates a new player, start playback in this tick, then remove stale players.
-    if (Platform.OS === 'web') {
-      clearCurrentPlayerRefs();
-      get().play().catch((e) => {
-        set({ isLoading: false, error: e instanceof Error ? e.message : 'Playback failed' });
-      });
-      setTimeout(removeStalePlayers, 0);
-    } else {
-      stopAndRemoveAllPlayers();
-      get().play().catch((e) => {
-        set({ isLoading: false, error: e instanceof Error ? e.message : 'Playback failed' });
-      });
-    }
+    // Do not await: on iOS Safari, play() must run in the same synchronous turn as the user gesture (tap).
+    // Awaiting would yield and break the gesture chain, so playback would stay at 0.
+    get().play().catch((e) => {
+      set({ isLoading: false, error: e instanceof Error ? e.message : 'Playback failed' });
+    });
   },
 
   addToQueue: (tracks) => {
@@ -446,6 +456,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           }));
           const startIndex = get().queue.length;
           set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  },
+}));
+}));
+          const startIndex = get().queue.length;
+          set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  },
+}));
+s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
         }
       } catch {
         /* ignore */
