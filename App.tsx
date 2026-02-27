@@ -62,9 +62,16 @@ function AppContent() {
         await restoreServerUrl();
       } catch (error) {
         console.error('Server URL restoration failed', error);
-      } finally {
-        restoreSession();
-        restoreSettings();
+      }
+      try {
+        await restoreSession();
+      } catch (error) {
+        console.error('Session restoration failed', error);
+      }
+      try {
+        await restoreSettings();
+      } catch (error) {
+        console.error('Settings restoration failed', error);
       }
     })();
   }, [restoreServerUrl, restoreSession, restoreSettings]);
