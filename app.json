@@ -17,6 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.rompmusic.app",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "audio"
         ]
@@ -40,6 +41,12 @@
     "plugins": [
       "expo-secure-store",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "50819680-9c91-491a-8082-6aeb917ee909"
+      }
+    },
+    "owner": "romp"
   }
 }

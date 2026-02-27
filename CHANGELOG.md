@@ -18,10 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Server URL validation on iOS** — Server setup/settings now block insecure `http://` server URLs on iOS with a clear HTTPS requirement message.
 - **Server URL normalization** — Entering a bare host (for example `rompmusic.com`) now auto-normalizes to `https://rompmusic.com/api/v1` so self-hosted setup works without requiring users to type the scheme.
 - **First-launch native server setup** — Native apps now always require an explicit server URL on first launch; build-time API env defaults are treated as web-only.
+- **EAS build metadata** — Linked this client to the existing EAS project ID/owner in `app.json`, and set `cli.appVersionSource` to `local` in `eas.json` so CI/terminal builds do not block on version-source prompts.
 
 ### Fixed
 
 - **Persisted insecure server URLs on iOS** — Stored `http://` server URLs are now cleared during restore on iOS to avoid silent networking failures from App Transport Security.
+- **iOS export compliance prompt** — Added `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` to reduce App Store Connect manual export-compliance setup for standard HTTPS-only client behavior.
 
 ## [0.1.0-beta.8] - 2026-02-23
 
