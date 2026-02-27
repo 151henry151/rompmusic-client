@@ -92,6 +92,10 @@ export const api = {
     return fetchApi('/auth/me');
   },
 
+  async deleteAccount() {
+    return fetchApi('/auth/me', { method: 'DELETE' });
+  },
+
   getStreamUrl(trackId: number, format?: 'original' | 'ogg') {
     const apiBase = getApiBase();
     const base = `${apiBase.replace(/\/api\/v1\/?$/, '')}/api/v1/stream/${trackId}`;

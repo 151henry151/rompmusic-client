@@ -28,6 +28,7 @@ interface AuthState {
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   restoreSession: () => Promise<void>;
   clearPendingVerify: () => void;
 }
@@ -120,6 +121,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearPendingVerify: () => set({ pendingVerifyEmail: null }),
 
   logout: async () => {
+    setToken(null);
+    await setStoredToken(null);
+    set({ user: null, token: null });
+  },
+
+  deleteAccount: async () => {
+    await api.deleteAccount();
     setToken(null);
     await setStoredToken(null);
     set({ user: null, token: null });

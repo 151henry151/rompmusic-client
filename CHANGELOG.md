@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- (Changes since last release will be listed here)
+### Added
+
+- **Account deletion** — Settings → "Delete account" (Account section) with native confirmation; calls `DELETE /auth/me` then clears token and user. Required for App Store compliance.
+- **Mobile store readiness** — iOS: `UIBackgroundModes: ["audio"]` in app.json for background playback. Android: expo-build-properties with `targetSdkVersion: 34` for Play Store. Version in app.json set to 0.1.0-beta.3; About screen reads version from `Constants.expoConfig?.version`. `.env.example` documents `EXPO_PUBLIC_WEBSITE_URL` for Privacy/Terms links.
 
 ## [0.1.0-beta.11] - 2026-02-26
 

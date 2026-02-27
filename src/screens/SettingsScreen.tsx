@@ -4,8 +4,9 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Linking } from 'react-native';
+import { ScrollView, StyleSheet, Linking, Alert } from 'react-native';
 import { Text, List, Button, Switch, Menu, Dialog, Portal, TextInput } from 'react-native-paper';
+import Constants from 'expo-constants';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -16,6 +17,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const restoreSettings = useSettingsStore((s) => s.restoreSettings);
   const groupArtistsByCapitalization = useSettingsStore((s) => s.groupArtistsByCapitalization);
   const setGroupArtistsByCapitalization = useSettingsStore((s) => s.setGroupArtistsByCapitalization);
@@ -30,12 +32,14 @@ export default function SettingsScreen() {
   const [serverInput, setServerInput] = useState('');
   const [serverSaving, setServerSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
 
   const getDisplayServerUrl = useServerStore((s) => s.getDisplayServerUrl);
   const setServerUrl = useServerStore((s) => s.setServerUrl);
   const displayServerUrl = getDisplayServerUrl();
 
   const WEBSITE_BASE = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://rompmusic.com';
+  const appVersion = Constants.expoConfig?.version ?? '0.1.0-beta.3';
 
   useEffect(() => {
     restoreSettings();
@@ -64,6 +68,30 @@ export default function SettingsScreen() {
     } finally {
       setServerSaving(false);
     }
+  };
+
+  const handleDeleteAccountPress = () => {
+    Alert.alert(
+      'Delete account',
+      'Are you sure? This will permanently delete your account and all your data (playlists, play history). You cannot undo this.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleteAccountLoading(true);
+            try {
+              await deleteAccount();
+            } catch (e) {
+              Alert.alert('Error', e instanceof Error ? e.message : 'Failed to delete account');
+            } finally {
+              setDeleteAccountLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -140,6 +168,19 @@ export default function SettingsScreen() {
         style={styles.item}
         accessibilityRole="button"
       />
+      {user ? (
+        <List.Item
+          title="Delete account"
+          description="Permanently delete your account and all data"
+          titleStyle={styles.deleteAccountTitle}
+          left={() => <List.Icon icon="account-remove" color="#f87171" />}
+          right={(props) => (deleteAccountLoading ? null : <List.Icon {...props} icon="chevron-right" />)}
+          onPress={deleteAccountLoading ? undefined : handleDeleteAccountPress}
+          style={[styles.item, styles.deleteAccountItem]}
+          accessibilityRole="button"
+          accessibilityLabel="Delete account"
+        />
+      ) : null}
 
       <Text variant="titleSmall" style={styles.section}>
         Playback
@@ -169,7 +210,7 @@ export default function SettingsScreen() {
       </Text>
       <List.Item
         title="About"
-        description="RompMusic 0.1.0-beta.3"
+        description={`RompMusic ${appVersion}`}
         left={() => <List.Icon icon="information" />}
         right={(props) => <List.Icon {...props} icon="chevron-right" />}
         onPress={() => setAboutVisible(true)}
@@ -200,7 +241,7 @@ export default function SettingsScreen() {
           <Dialog.Title>About RompMusic</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium" style={styles.dialogText}>
-              RompMusic 0.1.0-beta.3{'\n\n'}
+              RompMusic {appVersion}{'\n\n'}
               Libre music streaming. Free as in freedom.{'\n\n'}
               Licensed under GPL-3.0. Use, study, modify, and share. Self-hosted — your music stays on your server. No tracking, no ads.
             </Text>
@@ -282,5 +323,11 @@ const styles = StyleSheet.create({
     color: '#f87171',
     marginTop: 8,
     fontSize: 14,
+  },
+  deleteAccountItem: {
+    borderBottomWidth: 0,
+  },
+  deleteAccountTitle: {
+    color: '#f87171',
   },
 });
