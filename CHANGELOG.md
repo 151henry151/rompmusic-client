@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native deep-link handling** — Navigation linking now includes native prefixes (`rompmusic://`, website URLs) so iOS builds can resolve incoming app/website links to in-app routes.
 - **Share URL generation** — Album/track share URLs now use a shared website-base utility (`EXPO_PUBLIC_WEBSITE_URL` fallback) instead of browser-specific fallbacks.
 - **Server URL validation on iOS** — Server setup/settings now block insecure `http://` server URLs on iOS with a clear HTTPS requirement message.
+- **Server URL normalization** — Entering a bare host (for example `rompmusic.com`) now auto-normalizes to `https://rompmusic.com/api/v1` so self-hosted setup works without requiring users to type the scheme.
+- **First-launch native server setup** — Native apps now always require an explicit server URL on first launch; build-time API env defaults are treated as web-only.
 
 ### Fixed
 
