@@ -8,6 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 const STORAGE_KEY = 'rompmusic_server_url';
@@ -18,6 +19,10 @@ export function normalizeServerUrl(input: string): string {
   if (!trimmed) return trimmed;
   if (/\/api\/v1\/?$/.test(trimmed)) return trimmed.replace(/\/+$/, '');
   return `${trimmed.replace(/\/+$/, '')}/api/v1`;
+}
+
+export function isInsecureHttpUrl(input: string): boolean {
+  return input.trim().toLowerCase().startsWith('http://');
 }
 
 interface ServerState {
@@ -48,6 +53,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   setServerUrl: async (url) => {
     const value = url ? normalizeServerUrl(url) || null : null;
+    if (value && Platform.OS === 'ios' && isInsecureHttpUrl(value)) {
+      throw new Error('iOS requires an HTTPS server URL. Use https:// for your RompMusic server.');
+    }
     if (value) {
       await AsyncStorage.setItem(STORAGE_KEY, value);
       set({ serverUrl: value });
@@ -60,6 +68,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
   restoreServerUrl: async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored && Platform.OS === 'ios' && isInsecureHttpUrl(stored)) {
+        await AsyncStorage.removeItem(STORAGE_KEY);
+        set({ serverUrl: null, isRestored: true });
+        return;
+      }
       set({ serverUrl: stored || null, isRestored: true });
     } catch {
       set({ serverUrl: null, isRestored: true });

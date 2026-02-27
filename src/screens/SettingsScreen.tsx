@@ -4,12 +4,13 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Linking } from 'react-native';
+import { ScrollView, StyleSheet, Linking, Platform } from 'react-native';
 import { Text, List, Button, Switch, Menu, Dialog, Portal, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useServerStore, normalizeServerUrl } from '../store/serverStore';
+import { useServerStore, normalizeServerUrl, isInsecureHttpUrl } from '../store/serverStore';
+import { getWebsiteBaseUrl } from '../utils/publicWebsiteUrl';
 
 
 export default function SettingsScreen() {
@@ -35,7 +36,7 @@ export default function SettingsScreen() {
   const setServerUrl = useServerStore((s) => s.setServerUrl);
   const displayServerUrl = getDisplayServerUrl();
 
-  const WEBSITE_BASE = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://rompmusic.com';
+  const WEBSITE_BASE = getWebsiteBaseUrl();
 
   useEffect(() => {
     restoreSettings();
@@ -51,6 +52,10 @@ export default function SettingsScreen() {
     const normalized = normalizeServerUrl(serverInput);
     if (!normalized) {
       setServerError('Please enter a valid server URL (e.g. https://music.example.com)');
+      return;
+    }
+    if (Platform.OS === 'ios' && isInsecureHttpUrl(normalized)) {
+      setServerError('iOS requires HTTPS server URLs. Use https://music.example.com');
       return;
     }
     setServerSaving(true);

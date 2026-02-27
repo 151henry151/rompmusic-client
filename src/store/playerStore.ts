@@ -180,12 +180,13 @@ function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null):
     setActive.call(player, false);
     return;
   }
-  setActive.call(player, true, {
+  const metadata: Record<string, string> = {
     title: track.title,
     artist: track.artist_name || 'Unknown',
-    albumTitle: track.album_title,
     artworkUrl: api.getArtworkUrl('album', track.album_id),
-  });
+  };
+  if (track.album_title) metadata.albumTitle = track.album_title;
+  setActive.call(player, true, metadata);
 }
 
 /** Call play(); if not loaded yet, call again when isLoaded (keeps preload, no extra request). */

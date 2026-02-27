@@ -31,6 +31,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useServerStore } from '../store/serverStore';
 import type { RootStackParamList, AppStackParamList } from './types';
 import { getWebBasePath } from '../utils/webBasePath';
+import { getWebsiteBaseUrl } from '../utils/publicWebsiteUrl';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
@@ -142,6 +143,7 @@ export default function AppNavigator() {
   }
 
   const webBasePath = Platform.OS === 'web' ? getWebBasePath() : 'app';
+  const websiteBaseUrl = getWebsiteBaseUrl();
   const linkingConfig = {
     screens: {
       App: {
@@ -194,7 +196,10 @@ export default function AppNavigator() {
           return state;
         },
       }
-    : undefined;
+    : {
+        prefixes: ['rompmusic://', `${websiteBaseUrl}/app`, websiteBaseUrl],
+        config: linkingConfig,
+      };
 
   return (
     <NavigationContainer

@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- (Changes since last release will be listed here)
+### Added
+
+- **iOS app config for native readiness** — Added Expo scheme `rompmusic` and iOS `UIBackgroundModes: ["audio"]` so deep-link routing and background audio behavior are configured for native builds.
+
+### Changed
+
+- **Native deep-link handling** — Navigation linking now includes native prefixes (`rompmusic://`, website URLs) so iOS builds can resolve incoming app/website links to in-app routes.
+- **Share URL generation** — Album/track share URLs now use a shared website-base utility (`EXPO_PUBLIC_WEBSITE_URL` fallback) instead of browser-specific fallbacks.
+- **Server URL validation on iOS** — Server setup/settings now block insecure `http://` server URLs on iOS with a clear HTTPS requirement message.
+
+### Fixed
+
+- **Persisted insecure server URLs on iOS** — Stored `http://` server URLs are now cleared during restore on iOS to avoid silent networking failures from App Transport Security.
 
 ## [0.1.0-beta.8] - 2026-02-23
 

@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, TextInput, Button } from 'react-native-paper';
-import { useServerStore, normalizeServerUrl } from '../store/serverStore';
+import { useServerStore, normalizeServerUrl, isInsecureHttpUrl } from '../store/serverStore';
 
 export default function ServerSetupScreen() {
   const setServerUrl = useServerStore((s) => s.setServerUrl);
@@ -21,6 +21,10 @@ export default function ServerSetupScreen() {
     const normalized = normalizeServerUrl(input);
     if (!normalized) {
       setError('Please enter your server URL (e.g. https://music.example.com)');
+      return;
+    }
+    if (Platform.OS === 'ios' && isInsecureHttpUrl(normalized)) {
+      setError('iOS requires HTTPS server URLs. Use https://music.example.com');
       return;
     }
     try {

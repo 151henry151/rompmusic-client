@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
+import { buildPublicPath } from '../utils/publicWebsiteUrl';
 
 type TrackDetailParams = { trackId: number };
 type RootStackParamList = {
@@ -68,7 +69,7 @@ export default function TrackDetailScreen() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       return `${window.location.origin}/track/${track.id}`;
     }
-    return `https://rompmusic.com/track/${track.id}`;
+    return buildPublicPath(`/track/${track.id}`);
   };
 
   const handleShare = async () => {
