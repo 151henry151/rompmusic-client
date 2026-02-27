@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed startup bootstrap robustness in `App.tsx` by wiring `AppErrorBoundary` correctly and guarding initialization/restore failures to avoid hard app exits on launch.
 - iOS server URL validation now rejects insecure remote `http://` entries (ATS-safe), while still allowing localhost development URLs.
 - Fixed native server setup flow getting stuck on the setup screen after tapping Continue by subscribing AppNavigator to reactive server URL state.
+- Fixed a release-Android crash path by awaiting session/settings restoration bootstrap calls in `App.tsx` and catching any async restoration failures.
+- Removed a native-incompatible `dataSet` prop from the Library screen root container.
 
 ## [0.1.0-beta.8] - 2026-02-23
 
