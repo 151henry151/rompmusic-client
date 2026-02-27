@@ -3,21 +3,53 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Server URL (API base) configuration. Persisted so first-run can prompt, and
- * editable in Settings. When EXPO_PUBLIC_API_URL is set (e.g. demo build),
- * that is used and no prompt is shown.
+ * editable in Settings. EXPO_PUBLIC_API_URL can be used as a web/default
+ * fallback, while native setup still requires an explicit saved server URL.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 const STORAGE_KEY = 'rompmusic_server_url';
+const URL_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
 
 /** Normalize user input to a full API base URL (e.g. https://music.example.com -> https://music.example.com/api/v1). */
 export function normalizeServerUrl(input: string): string {
-  const trimmed = input.trim().replace(/\/+$/, '');
-  if (!trimmed) return trimmed;
-  if (/\/api\/v1\/?$/.test(trimmed)) return trimmed.replace(/\/+$/, '');
-  return `${trimmed.replace(/\/+$/, '')}/api/v1`;
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  const withScheme = URL_SCHEME_REGEX.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(withScheme);
+    const cleanPath = parsed.pathname.replace(/\/+$/, '');
+    if (/\/api\/v1$/i.test(cleanPath)) {
+      parsed.pathname = cleanPath;
+    } else if (!cleanPath || cleanPath === '/') {
+      parsed.pathname = '/api/v1';
+    } else {
+      parsed.pathname = `${cleanPath}/api/v1`;
+    }
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    const fallback = withScheme.replace(/\/+$/, '');
+    if (/\/api\/v1\/?$/i.test(fallback)) return fallback.replace(/\/+$/, '');
+    return `${fallback}/api/v1`;
+  }
+}
+
+/** Returns true when URL uses insecure HTTP for a non-local host. */
+export function isInsecureRemoteHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+  } catch {
+    return false;
+  }
 }
 
 interface ServerState {
@@ -29,7 +61,7 @@ interface ServerState {
   restoreServerUrl: () => Promise<void>;
   /** Effective API base: stored URL, or env, or default. Sync for use in api client. */
   getApiBase: () => string;
-  /** True if user has configured a server (stored) or build is preconfigured (env set). */
+  /** True if user has configured a server (stored), or web build has env preconfiguration. */
   hasConfiguredServer: () => boolean;
   /** Human-readable server URL for display (without /api/v1). Null if using env default. */
   getDisplayServerUrl: () => string | null;
@@ -75,14 +107,15 @@ export const useServerStore = create<ServerState>((set, get) => ({
   hasConfiguredServer: () => {
     const { serverUrl } = get();
     if (serverUrl) return true;
-    if (process.env.EXPO_PUBLIC_API_URL) return true;
+    // Native apps should require explicit first-run setup unless a URL is saved.
+    if (typeof window !== 'undefined' && process.env.EXPO_PUBLIC_API_URL) return true;
     return false;
   },
 
   getDisplayServerUrl: () => {
     const { serverUrl } = get();
     if (serverUrl) return serverUrl.replace(/\/api\/v1\/?$/, '') || serverUrl;
-    if (process.env.EXPO_PUBLIC_API_URL) {
+    if (typeof window !== 'undefined' && process.env.EXPO_PUBLIC_API_URL) {
       const u = process.env.EXPO_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '');
       return u || process.env.EXPO_PUBLIC_API_URL;
     }

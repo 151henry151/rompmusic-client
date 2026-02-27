@@ -4,12 +4,12 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Linking } from 'react-native';
+import { ScrollView, StyleSheet, Linking, Platform } from 'react-native';
 import { Text, List, Button, Switch, Menu, Dialog, Portal, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useServerStore, normalizeServerUrl } from '../store/serverStore';
+import { useServerStore, normalizeServerUrl, isInsecureRemoteHttpUrl } from '../store/serverStore';
 
 
 export default function SettingsScreen() {
@@ -51,6 +51,10 @@ export default function SettingsScreen() {
     const normalized = normalizeServerUrl(serverInput);
     if (!normalized) {
       setServerError('Please enter a valid server URL (e.g. https://music.example.com)');
+      return;
+    }
+    if (Platform.OS === 'ios' && isInsecureRemoteHttpUrl(normalized)) {
+      setServerError('iOS requires https:// for remote servers. Use https://your-server.example.com');
       return;
     }
     setServerSaving(true);

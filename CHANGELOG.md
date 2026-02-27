@@ -11,10 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Restored accidentally removed client code by aligning Android branch sources with the `master` baseline (navigation, stores, server setup flow, history, and related screens/components).
 - Restored EAS metadata and preview APK local credentials configuration for reproducible Android builds.
+- Server URL normalization now accepts bare host input (e.g. `rompmusic.com`) and normalizes it to `https://.../api/v1`.
+- Native first-run setup now requires an explicitly saved server URL; `EXPO_PUBLIC_API_URL` remains a web/default fallback instead of bypassing native onboarding.
 
 ### Fixed
 
 - Fixed startup bootstrap robustness in `App.tsx` by wiring `AppErrorBoundary` correctly and guarding initialization/restore failures to avoid hard app exits on launch.
+- iOS server URL validation now rejects insecure remote `http://` entries (ATS-safe), while still allowing localhost development URLs.
 
 ## [0.1.0-beta.8] - 2026-02-23
 
