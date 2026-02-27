@@ -13,11 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restored EAS metadata and preview APK local credentials configuration for reproducible Android builds.
 - Server URL normalization now accepts bare host input (e.g. `rompmusic.com`) and normalizes it to `https://.../api/v1`.
 - Native first-run setup now requires an explicitly saved server URL; `EXPO_PUBLIC_API_URL` remains a web/default fallback instead of bypassing native onboarding.
+- First-run server setup now pre-fills `https://rompmusic.com` and uses shorter helper copy: “Enter your server URL or IP address.”
 
 ### Fixed
 
 - Fixed startup bootstrap robustness in `App.tsx` by wiring `AppErrorBoundary` correctly and guarding initialization/restore failures to avoid hard app exits on launch.
 - iOS server URL validation now rejects insecure remote `http://` entries (ATS-safe), while still allowing localhost development URLs.
+- Fixed native server setup flow getting stuck on the setup screen after tapping Continue by subscribing AppNavigator to reactive server URL state.
 
 ## [0.1.0-beta.8] - 2026-02-23
 

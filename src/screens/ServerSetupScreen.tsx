@@ -13,7 +13,7 @@ import { useServerStore, normalizeServerUrl, isInsecureRemoteHttpUrl } from '../
 
 export default function ServerSetupScreen() {
   const setServerUrl = useServerStore((s) => s.setServerUrl);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState('https://rompmusic.com');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -48,12 +48,12 @@ export default function ServerSetupScreen() {
           Connect to your server
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          Enter the URL of your RompMusic server. You can use the same server address you use in a browser (e.g. https://music.example.com). The app will use the API at /api/v1.
+          Enter your server URL or IP address.
         </Text>
         <TextInput
           mode="outlined"
           label="Server URL"
-          placeholder="https://music.example.com"
+          placeholder="https://rompmusic.com"
           value={input}
           onChangeText={(t) => { setInput(t); setError(null); }}
           onSubmitEditing={handleSubmit}
