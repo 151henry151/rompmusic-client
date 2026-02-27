@@ -3,7 +3,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+import { useServerStore } from '../store/serverStore';
+
+/** Resolve API base URL from server store (user-configured or env for demo build). */
+function getApiBase(): string {
+  return useServerStore.getState().getApiBase();
+}
 
 let token: string | null = null;
 
@@ -15,8 +20,19 @@ export function getToken() {
   return token;
 }
 
+/** Build query string, omitting undefined and empty string so we never send e.g. search=undefined */
+function toQueryString(params: Record<string, string | number | boolean | undefined>): string {
+  const filtered: Record<string, string> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') filtered[k] = String(v);
+  }
+  const q = new URLSearchParams(filtered).toString();
+  return q ? '?' + q : '';
+}
+
 async function fetchApi(path: string, opts: RequestInit = {}) {
-  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+  const base = getApiBase();
+  const url = path.startsWith('http') ? path : `${base}${path}`;
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(opts.headers as Record<string, string>),
@@ -24,7 +40,7 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { ...opts, headers });
+  const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials: 'include' });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(err || `HTTP ${res.status}`);
@@ -51,43 +67,99 @@ export const api = {
     });
   },
 
+  async verifyEmail(email: string, code: string) {
+    return fetchApi('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+  },
+
+  async forgotPassword(email: string) {
+    return fetchApi('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async resetPassword(email: string, code: string, newPassword: string) {
+    return fetchApi('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
+  },
+
   async getMe() {
     return fetchApi('/auth/me');
   },
 
-  getStreamUrl(trackId: number) {
-    return `${API_BASE.replace('/api/v1', '')}/api/v1/stream/${trackId}`;
+  getStreamUrl(trackId: number, format?: 'original' | 'ogg') {
+    const apiBase = getApiBase();
+    const base = `${apiBase.replace(/\/api\/v1\/?$/, '')}/api/v1/stream/${trackId}`;
+    if (format && format !== 'original') {
+      return base + (base.includes('?') ? '&' : '?') + 'format=' + encodeURIComponent(format);
+    }
+    return base;
   },
 
-  async getArtists(params?: { skip?: number; limit?: number; search?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi(`/library/artists${q ? '?' + q : ''}`);
+  async getClientConfig() {
+    return fetchApi('/config/client') as Promise<{ client_settings: Record<string, { visible: boolean; default: boolean | string; allowed?: string[] }> }>;
+  },
+
+  getArtworkUrl(type: 'album', id: number) {
+    const apiBase = getApiBase();
+    return `${apiBase.replace(/\/api\/v1\/?$/, '')}/api/v1/artwork/${type}/${id}`;
+  },
+
+  async getArtists(params?: { skip?: number; limit?: number; search?: string; home?: boolean; sort_by?: string; order?: string }) {
+    return fetchApi(`/library/artists${params ? toQueryString(params) : ''}`);
   },
 
   async getArtist(id: number) {
     return fetchApi(`/library/artists/${id}`);
   },
 
-  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi(`/library/albums${q ? '?' + q : ''}`);
+  async getAlbums(params?: { skip?: number; limit?: number; artist_id?: number; search?: string; sort_by?: string; order?: string; random?: boolean; artwork_first?: boolean }) {
+    return fetchApi(`/library/albums${params ? toQueryString(params) : ''}`);
   },
 
   async getAlbum(id: number) {
     return fetchApi(`/library/albums/${id}`);
   },
 
-  async getTracks(params?: { skip?: number; limit?: number; album_id?: number; artist_id?: number; search?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi(`/library/tracks${q ? '?' + q : ''}`);
+  async getTracks(params?: { skip?: number; limit?: number; album_id?: number; artist_id?: number; search?: string; sort_by?: string; order?: string }) {
+    return fetchApi(`/library/tracks${params ? toQueryString(params) : ''}`);
+  },
+
+  async getRecentlyAdded(limit = 20) {
+    return fetchApi(`/library/tracks/recently-added?limit=${limit}`);
+  },
+
+  async getRecentlyPlayed(limit = 20) {
+    return fetchApi(`/library/tracks/recently-played?limit=${limit}`);
+  },
+
+  async getMostPlayed(limit = 20) {
+    return fetchApi(`/library/tracks/most-played?limit=${limit}`);
+  },
+
+  async getFrequentlyPlayed(limit = 20) {
+    return fetchApi(`/library/tracks/frequently-played?limit=${limit}`);
+  },
+
+  async getSimilarTracks(trackId: number, limit = 20) {
+    return fetchApi(`/library/tracks/similar?track_id=${trackId}&limit=${limit}`);
+  },
+
+  async getRecommendedTracks(limit = 20) {
+    return fetchApi(`/library/tracks/recommended?limit=${limit}`);
   },
 
   async getTrack(id: number) {
     return fetchApi(`/library/tracks/${id}`);
   },
 
-  async search(q: string) {
-    return fetchApi(`/search?q=${encodeURIComponent(q)}`);
+  async search(q: string, limit = 20) {
+    return fetchApi(`/search?q=${encodeURIComponent(q)}&limit=${Math.min(50, Math.max(1, limit))}`);
   },
 
   async getPlaylists() {

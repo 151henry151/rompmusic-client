@@ -13,10 +13,11 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import { groupArtistsByNormalizedName } from '../utils/artistMerge';
+import { groupAlbumsByArtwork } from '../utils/albumGrouping';
 
 type RootStackParamList = {
-  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
-  AlbumDetail: { albumId: number; highlightTrackId?: number };
+  ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string; isAssortedArtists?: boolean };
+  AlbumDetail: { albumId: number; albumIds?: number[]; highlightTrackId?: number };
   TrackDetail: { trackId: number };
 };
 
@@ -33,6 +34,10 @@ export default function SearchScreen() {
   const groupedSearchArtists = useMemo(
     () => groupArtistsByNormalizedName(data?.artists || []),
     [data?.artists]
+  );
+  const groupedSearchAlbums = useMemo(
+    () => groupAlbumsByArtwork((data?.albums || []) as { id: number; title: string; artist_name?: string; year?: number | null; has_artwork?: boolean | null; artwork_hash?: string | null }[]),
+    [data?.albums]
   );
 
   const handlePlayTrack = async (trackId: number) => {
@@ -73,9 +78,12 @@ export default function SearchScreen() {
             <List.Item
               key={`artist-${g.primaryId}`}
               title={g.displayName}
-              left={() => <ArtworkImage type="artist" id={g.primaryId} size={48} style={styles.artwork} />}
+              left={() => <List.Icon icon="account" />}
               onPress={() =>
-                navigation.navigate('ArtistDetail', { artistIds: g.artistIds, artistName: g.displayName })
+                navigation.navigate('ArtistDetail', {
+                  artistIds: g.artistIds,
+                  artistName: g.displayName,
+                })
               }
               right={(props) => <List.Icon {...props} icon="chevron-right" />}
               style={styles.item}
@@ -87,22 +95,28 @@ export default function SearchScreen() {
       )}
 
       {/* Albums */}
-      {data?.albums?.length > 0 && (
+      {groupedSearchAlbums.length > 0 && (
         <>
           <Text variant="titleSmall" style={styles.section}>
             Albums
           </Text>
-          {(data.albums || []).map((a: { id: number; title: string; artist_name?: string }) => (
+          {groupedSearchAlbums.map((g) => (
             <List.Item
-              key={`album-${a.id}`}
-              title={a.title}
-              description={a.artist_name}
-              left={() => <ArtworkImage type="album" id={a.id} size={48} style={styles.artwork} />}
-              onPress={() => navigation.navigate('AlbumDetail', { albumId: a.id })}
+              key={`album-${g.albumIds.join('-')}`}
+              title={g.displayTitle}
+              description={
+                g.artistNames ? (
+                  <Text variant="bodySmall" style={styles.link} onPress={(e) => { e?.stopPropagation?.(); if (g.primaryAlbum.artist_id != null) navigation.navigate('ArtistDetail', { artistIds: [g.primaryAlbum.artist_id], artistName: g.artistNames }); }}>
+                    {g.artistNames}
+                  </Text>
+                ) : undefined
+              }
+              left={() => <ArtworkImage type="album" id={g.primaryAlbum.id} size={48} style={styles.artwork} />}
+              onPress={() => navigation.navigate('AlbumDetail', { albumId: g.albumIds[0], albumIds: g.albumIds })}
               right={(props) => <List.Icon {...props} icon="chevron-right" />}
               style={styles.item}
               accessibilityRole="button"
-              accessibilityLabel={`View album ${a.title}`}
+              accessibilityLabel={`View album ${g.displayTitle}`}
             />
           ))}
         </>
@@ -114,7 +128,7 @@ export default function SearchScreen() {
           <Text variant="titleSmall" style={styles.section}>
             Tracks
           </Text>
-          {(data.tracks || []).map((t: { id: number; title: string; artist_name?: string; album_id: number }) => (
+          {(data.tracks || []).map((t: { id: number; title: string; artist_id?: number; artist_name?: string; album_id: number; album_title?: string }) => (
             <View key={`track-${t.id}`} style={styles.trackRow}>
               <TouchableOpacity
                 style={styles.trackRowMain}
@@ -125,7 +139,19 @@ export default function SearchScreen() {
                 <ArtworkImage type="album" id={t.album_id} size={48} style={styles.artwork} />
                 <View style={styles.trackRowText}>
                   <Text variant="bodyLarge" style={styles.trackTitle}>{t.title}</Text>
-                  <Text variant="bodySmall" style={styles.trackDesc}>{t.artist_name || 'Unknown'}</Text>
+                  <View style={styles.trackDescRow}>
+                    <Text variant="bodySmall" style={styles.trackDescLink} onPress={(e) => { e?.stopPropagation?.(); t.artist_id != null && navigation.navigate('ArtistDetail', { artistIds: [t.artist_id], artistName: t.artist_name || 'Unknown' }); }}>
+                      {t.artist_name || 'Unknown'}
+                    </Text>
+                    {t.album_title != null && (
+                      <>
+                        <Text variant="bodySmall" style={styles.trackDescSep}> • </Text>
+                        <Text variant="bodySmall" style={styles.trackDescLink} onPress={(e) => { e?.stopPropagation?.(); navigation.navigate('AlbumDetail', { albumId: t.album_id }); }}>
+                          {t.album_title}
+                        </Text>
+                      </>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
               <IconButton
@@ -164,5 +190,9 @@ const styles = StyleSheet.create({
   trackRowText: { flex: 1, marginLeft: 12 },
   trackTitle: { color: '#fff' },
   trackDesc: { color: '#888' },
+  trackDescRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  trackDescLink: { color: '#4a9eff' },
+  trackDescSep: { color: '#666' },
+  link: { color: '#4a9eff' },
   artwork: { marginRight: 0 },
 });

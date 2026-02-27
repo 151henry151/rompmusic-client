@@ -7,9 +7,12 @@ import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, IconButton, List, Switch } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
+import type { AppStackParamList } from '../navigation/types';
 
 interface Props {
   onClose: () => void;
@@ -22,6 +25,7 @@ function formatTime(seconds: number): string {
 }
 
 export default function PlayerScreen({ onClose }: Props) {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Library'>>();
   const {
     currentTrack,
     queue,
@@ -68,9 +72,22 @@ export default function PlayerScreen({ onClose }: Props) {
       <Text variant="headlineSmall" style={styles.title}>
         {currentTrack.title}
       </Text>
-      <Text variant="bodyLarge" style={styles.artist}>
+      <Text
+        variant="bodyLarge"
+        style={styles.artist}
+        onPress={() => navigation.navigate('ArtistDetail', { artistIds: [currentTrack.artist_id], artistName: currentTrack.artist_name || 'Unknown' })}
+      >
         {currentTrack.artist_name || 'Unknown'}
       </Text>
+      {currentTrack.album_title && (
+        <Text
+          variant="bodyMedium"
+          style={styles.album}
+          onPress={() => navigation.navigate('AlbumDetail', { albumId: currentTrack.album_id })}
+        >
+          {currentTrack.album_title}
+        </Text>
+      )}
       {error && (
         <Text variant="bodySmall" style={styles.error}>
           {error}
@@ -176,7 +193,12 @@ const styles = StyleSheet.create({
   },
   artist: {
     textAlign: 'center',
-    color: '#888',
+    color: '#4a9eff',
+    marginBottom: 4,
+  },
+  album: {
+    textAlign: 'center',
+    color: '#4a9eff',
     marginBottom: 24,
   },
   slider: {
