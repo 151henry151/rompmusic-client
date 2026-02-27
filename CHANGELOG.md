@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native first-run setup now requires an explicitly saved server URL; `EXPO_PUBLIC_API_URL` remains a web/default fallback instead of bypassing native onboarding.
 - First-run server setup now pre-fills `https://rompmusic.com` and uses shorter helper copy: “Enter your server URL or IP address.”
 - Android Library initial album page size is reduced to lower concurrent image-load pressure on first render.
+- Albums grid on mobile now renders 4 cards per row.
 
 ### Fixed
 
@@ -25,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed a native-incompatible `dataSet` prop from the Library screen root container.
 - Guarded native artwork rendering against invalid image URIs by falling back to placeholders.
 - Fixed invalid `measureLayout` callback usage in Library section measurement that could throw during Android layout.
+- Login screen now includes a password visibility toggle.
+- Improved mobile login reliability by trying safe username/password normalizations (trim/case/email-local-part variants) when the server reports invalid credentials.
 
 ## [0.1.0-beta.8] - 2026-02-23
 

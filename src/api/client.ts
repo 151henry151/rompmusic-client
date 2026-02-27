@@ -42,7 +42,7 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
   const credentials = (opts as RequestInit & { credentials?: RequestCredentials }).credentials
-    ?? (Platform.OS === 'web' ? 'include' : 'omit');
+    ?? 'include';
   const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials });
   if (!res.ok) {
     const err = await res.text();
@@ -66,23 +66,49 @@ function parseApiError(text: string): string {
 
 export const api = {
   async login(username: string, password: string) {
-    const body = JSON.stringify({ username: username.trim(), password });
-    const tryLogin = (creds: RequestCredentials) =>
-      fetchApi('/auth/login', { method: 'POST', body, credentials: creds });
-    try {
-      const data = await tryLogin(Platform.OS === 'web' ? 'include' : 'omit');
-      return data.access_token;
-    } catch (e) {
-      if (Platform.OS !== 'web' && (e instanceof TypeError || (e as Error).message?.includes('fetch'))) {
+    const trimmedUsername = username.trim();
+    const usernameCandidates: string[] = [];
+    const pushUnique = (value: string) => {
+      if (value && !usernameCandidates.includes(value)) usernameCandidates.push(value);
+    };
+    pushUnique(trimmedUsername);
+    if (/[A-Z]/.test(trimmedUsername)) pushUnique(trimmedUsername.toLowerCase());
+    if (trimmedUsername.includes('@')) {
+      const localPart = trimmedUsername.split('@')[0]?.trim() ?? '';
+      pushUnique(localPart);
+      if (/[A-Z]/.test(localPart)) pushUnique(localPart.toLowerCase());
+    }
+
+    const passwordCandidates = [password];
+    const trimmedPassword = password.trim();
+    if (trimmedPassword && trimmedPassword !== password) {
+      passwordCandidates.push(trimmedPassword);
+    }
+
+    let lastInvalidCredError: unknown;
+    const isInvalidCredentialError = (error: unknown) =>
+      (error instanceof Error ? error.message.toLowerCase() : '').includes('invalid username or password');
+
+    for (const userCandidate of usernameCandidates) {
+      for (const passCandidate of passwordCandidates) {
         try {
-          const data = await tryLogin('include');
+          const data = await fetchApi('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username: userCandidate, password: passCandidate }),
+            credentials: Platform.OS === 'web' ? 'include' : 'omit',
+          });
           return data.access_token;
-        } catch (_) {
-          throw e;
+        } catch (error) {
+          if (isInvalidCredentialError(error)) {
+            lastInvalidCredError = error;
+            continue;
+          }
+          throw error;
         }
       }
-      throw e;
     }
+
+    throw lastInvalidCredError ?? new Error('Invalid username or password');
   },
 
   async register(username: string, email: string, password: string) {
