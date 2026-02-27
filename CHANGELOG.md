@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First-run server setup now pre-fills `https://rompmusic.com` and uses shorter helper copy: “Enter your server URL or IP address.”
 - Android Library initial album page size is reduced to lower concurrent image-load pressure on first render.
 - Albums grid on mobile now renders 4 cards per row.
+- Track detail and album detail screens now support swipe-down to dismiss (while keeping existing close/back controls).
 
 ### Fixed
 
@@ -28,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed invalid `measureLayout` callback usage in Library section measurement that could throw during Android layout.
 - Login screen now includes a password visibility toggle.
 - Improved mobile login reliability by trying safe username/password normalizations (trim/case/email-local-part variants) when the server reports invalid credentials.
+- Improved lock-screen/car metadata by always refreshing title/artist/album/artwork metadata on track changes.
+- Added headset/car media-command handling so seek-style remote button events can trigger previous/next track behavior.
 
 ## [0.1.0-beta.8] - 2026-02-23
 
