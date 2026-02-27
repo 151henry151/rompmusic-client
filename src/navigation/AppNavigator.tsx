@@ -42,6 +42,14 @@ const styles = StyleSheet.create({
   },
 });
 
+// #region agent log
+const _navLog = (hypothesisId: string, location: string, message: string, data?: object) => {
+  try {
+    console.log('[DEBUG]', JSON.stringify({ hypothesisId, location, message, data, timestamp: Date.now() }));
+  } catch (_) {}
+};
+// #endregion
+
 function AuthenticatedLayout() {
   const insets = useSafeAreaInsets();
   const [showPlayer, setShowPlayer] = React.useState(false);
@@ -51,6 +59,9 @@ function AuthenticatedLayout() {
   const fetchClientConfig = useSettingsStore((s) => s.fetchClientConfig);
 
   React.useEffect(() => {
+    // #region agent log
+    _navLog('D', 'AppNavigator.tsx:AuthenticatedLayout', 'useEffect: restoreSettings + fetchClientConfig', { platform: Platform.OS });
+    // #endregion
     restoreSettings();
     fetchClientConfig();
   }, [restoreSettings, fetchClientConfig]);

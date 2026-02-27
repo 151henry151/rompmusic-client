@@ -27,7 +27,8 @@ const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
 /** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
 const LIBRARY_ARTISTS_PAGE_SIZE = 80;
-const LIBRARY_ALBUMS_PAGE_SIZE = 80;
+/** Android: smaller initial page to avoid OOM/native crash from 80+ concurrent Image loads. */
+const LIBRARY_ALBUMS_PAGE_SIZE = Platform.OS === 'android' ? 24 : 80;
 /** When sort is Random, fetch one large page (no pagination) so each refresh gives a single new random order. */
 const LIBRARY_ALBUMS_RANDOM_LIMIT = 500;
 const LIBRARY_TRACKS_PAGE_SIZE = 1000;
@@ -177,7 +178,18 @@ const sectionIndexStyles = StyleSheet.create({
   },
 });
 
+// #region agent log
+const _log = (hypothesisId: string, location: string, message: string, data?: object) => {
+  try {
+    console.log('[DEBUG]', JSON.stringify({ hypothesisId, location, message, data, timestamp: Date.now() }));
+  } catch (_) {}
+};
+// #endregion
+
 export default function LibraryScreen() {
+  // #region agent log
+  _log('A', 'LibraryScreen.tsx:mount', 'LibraryScreen mounting', { platform: Platform.OS });
+  // #endregion
   const [tab, setTab] = useState<TabType>('albums');
   const librarySort = useSettingsStore((s) => s.librarySort);
   const setLibrarySort = useSettingsStore((s) => s.setLibrarySort);
@@ -305,6 +317,9 @@ export default function LibraryScreen() {
   }, [tab, isAlbumsRandomSort, refetchAlbums]);
   const albumsRaw = albumsData?.pages.flat() ?? [];
   const albums = albumsRaw;
+  // #region agent log
+  if (albums.length > 0) _log('B', 'LibraryScreen.tsx:albums', 'Albums received, about to group', { count: albums.length, platform: Platform.OS });
+  // #endregion
   const albumGroups = useMemo(() => {
     const groups = groupAlbumsByArtwork(albums);
     // No-artwork / placeholder albums at the bottom: scroll to end to see them
@@ -316,6 +331,9 @@ export default function LibraryScreen() {
       return aShowsArt ? -1 : 1;
     });
   }, [albums]);
+  // #region agent log
+  if (albumGroups.length > 0) _log('C', 'LibraryScreen.tsx:albumGroups', 'Album groups computed, about to render cards', { groupCount: albumGroups.length, platform: Platform.OS });
+  // #endregion
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;

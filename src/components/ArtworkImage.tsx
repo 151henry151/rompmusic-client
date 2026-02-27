@@ -48,6 +48,14 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
   const token = useAuthStore((s) => s.token);
   let uri = api.getArtworkUrl(type, id);
   if (token) uri += (uri.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  // #region agent log
+  const uriInvalid = !uri || typeof uri !== 'string' || uri.includes('undefined');
+  if (Platform.OS !== 'web' && visible && !failed && uriInvalid) {
+    try {
+      console.log('[DEBUG]', JSON.stringify({ hypothesisId: 'E', location: 'ArtworkImage.tsx', message: 'Invalid URI, using placeholder', data: { id }, timestamp: Date.now() }));
+    } catch (_) {}
+  }
+  // #endregion
 
   const radius = borderRadius ?? size / 8;
   const boxStyle = { width: size, height: size, borderRadius: radius };
@@ -73,6 +81,15 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
   }
 
   if (failed) {
+    return (
+      <View style={[styles.placeholder, boxStyle, style]}>
+        <Icon source="music" size={size * 0.5} color="#666" />
+      </View>
+    );
+  }
+
+  // Guard: invalid URI can crash native Image on Android
+  if (Platform.OS !== 'web' && uriInvalid) {
     return (
       <View style={[styles.placeholder, boxStyle, style]}>
         <Icon source="music" size={size * 0.5} color="#666" />
