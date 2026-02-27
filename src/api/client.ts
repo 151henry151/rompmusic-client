@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Platform } from 'react-native';
 import { useServerStore } from '../store/serverStore';
 
 /** Resolve API base URL from server store (user-configured or env for demo build). */
@@ -34,16 +35,18 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   const base = getApiBase();
   const url = path.startsWith('http') ? path : `${base}${path}`;
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json; charset=utf-8',
     ...(opts.headers as Record<string, string>),
   };
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials: 'include' });
+  const credentials = (opts as RequestInit & { credentials?: RequestCredentials }).credentials
+    ?? (Platform.OS === 'web' ? 'include' : 'omit');
+  const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || `HTTP ${res.status}`);
+    throw new Error(parseApiError(err) || `HTTP ${res.status}`);
   }
   if (res.headers.get('content-type')?.includes('application/json')) {
     return res.json();
@@ -51,13 +54,35 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   return res.text();
 }
 
+/** Parse API error response (e.g. {"detail":"Invalid username or password"}) into a readable message. */
+function parseApiError(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed?.detail === 'string' ? parsed.detail : text;
+  } catch {
+    return text;
+  }
+}
+
 export const api = {
   async login(username: string, password: string) {
-    const data = await fetchApi('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
-    return data.access_token;
+    const body = JSON.stringify({ username: username.trim(), password });
+    const tryLogin = (creds: RequestCredentials) =>
+      fetchApi('/auth/login', { method: 'POST', body, credentials: creds });
+    try {
+      const data = await tryLogin(Platform.OS === 'web' ? 'include' : 'omit');
+      return data.access_token;
+    } catch (e) {
+      if (Platform.OS !== 'web' && (e instanceof TypeError || (e as Error).message?.includes('fetch'))) {
+        try {
+          const data = await tryLogin('include');
+          return data.access_token;
+        } catch (_) {
+          throw e;
+        }
+      }
+      throw e;
+    }
   },
 
   async register(username: string, email: string, password: string) {

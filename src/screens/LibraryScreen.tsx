@@ -216,7 +216,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
-  const cardsPerRow = isMobile ? 3 : 5;
+  const cardsPerRow = isMobile ? 4 : 5;
   const cardWidth = Math.max(100, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
   const currentSortBy = tab === 'artists' ? sortBy.artists : sortBy.albums;
