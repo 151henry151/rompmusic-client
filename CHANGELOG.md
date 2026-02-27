@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server URL normalization now accepts bare host input (e.g. `rompmusic.com`) and normalizes it to `https://.../api/v1`.
 - Native first-run setup now requires an explicitly saved server URL; `EXPO_PUBLIC_API_URL` remains a web/default fallback instead of bypassing native onboarding.
 - First-run server setup now pre-fills `https://rompmusic.com` and uses shorter helper copy: “Enter your server URL or IP address.”
+- Android Library initial album page size is reduced to lower concurrent image-load pressure on first render.
 
 ### Fixed
 
@@ -22,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed native server setup flow getting stuck on the setup screen after tapping Continue by subscribing AppNavigator to reactive server URL state.
 - Fixed a release-Android crash path by awaiting session/settings restoration bootstrap calls in `App.tsx` and catching any async restoration failures.
 - Removed a native-incompatible `dataSet` prop from the Library screen root container.
+- Guarded native artwork rendering against invalid image URIs by falling back to placeholders.
+- Fixed invalid `measureLayout` callback usage in Library section measurement that could throw during Android layout.
 
 ## [0.1.0-beta.8] - 2026-02-23
 

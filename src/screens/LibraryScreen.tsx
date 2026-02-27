@@ -551,10 +551,18 @@ export default function LibraryScreen() {
       const headerNode = sectionHeaderRefsRef.current[key];
       const contentNode = scrollContentRef.current;
       if (headerNode && contentNode && typeof (headerNode as any).measureLayout === 'function') {
-        (headerNode as any).measureLayout(contentNode, 0, 0, (_x: number, y: number) => {
-          scrollToOffset(y);
-        });
-        return true;
+        try {
+          (headerNode as any).measureLayout(
+            contentNode,
+            (_x: number, y: number) => {
+              scrollToOffset(y);
+            },
+            () => {}
+          );
+          return true;
+        } catch {
+          return false;
+        }
       }
       return false;
     },
@@ -904,10 +912,18 @@ export default function LibraryScreen() {
               const headerNode = sectionHeaderRefsRef.current[key];
               const contentNode = scrollContentRef.current;
               if (headerNode && contentNode && typeof (headerNode as any).measureLayout === 'function') {
-                (headerNode as any).measureLayout(contentNode, 0, 0, (_x: number, y: number) => {
-                  sectionOffsetsRef.current[key] = y;
-                  if (key === targetSectionToScrollRef.current) scrollToOffsetRef.current(y);
-                });
+                try {
+                  (headerNode as any).measureLayout(
+                    contentNode,
+                    (_x: number, y: number) => {
+                      sectionOffsetsRef.current[key] = y;
+                      if (key === targetSectionToScrollRef.current) scrollToOffsetRef.current(y);
+                    },
+                    () => {}
+                  );
+                } catch {
+                  // Ignore transient measurement errors during layout.
+                }
               }
             }
       }
