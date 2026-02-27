@@ -134,11 +134,14 @@ function AuthenticatedLayout() {
 export default function AppNavigator() {
   const { isReady } = useAuthStore();
   const isServerRestored = useServerStore((s) => s.isRestored);
-  const hasConfiguredServer = useServerStore((s) => s.hasConfiguredServer);
+  const serverUrl = useServerStore((s) => s.serverUrl);
 
   if (!isReady || !isServerRestored) return null;
 
-  if (!hasConfiguredServer()) {
+  const hasConfiguredServer = Boolean(serverUrl) || (
+    Platform.OS === 'web' && Boolean(process.env.EXPO_PUBLIC_API_URL)
+  );
+  if (!hasConfiguredServer) {
     return <ServerSetupScreen />;
   }
 

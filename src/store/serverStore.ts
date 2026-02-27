@@ -12,13 +12,13 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 const STORAGE_KEY = 'rompmusic_server_url';
-const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+const URL_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
 
 /** Normalize user input to a full API base URL (e.g. https://music.example.com -> https://music.example.com/api/v1). */
 export function normalizeServerUrl(input: string): string {
   const raw = input.trim();
   if (!raw) return raw;
-  const withScheme = URL_SCHEME_RE.test(raw) ? raw : `https://${raw}`;
+  const withScheme = URL_SCHEME_REGEX.test(raw) ? raw : `https://${raw}`;
   let parsed: URL;
   try {
     parsed = new URL(withScheme);
@@ -30,8 +30,16 @@ export function normalizeServerUrl(input: string): string {
   return `${originAndPath}/api/v1`;
 }
 
-export function isInsecureHttpUrl(input: string): boolean {
-  return input.trim().toLowerCase().startsWith('http://');
+/** Returns true when URL uses insecure HTTP for a non-local host. */
+export function isInsecureRemoteHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+  } catch {
+    return false;
+  }
 }
 
 interface ServerState {
@@ -62,7 +70,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   setServerUrl: async (url) => {
     const value = url ? normalizeServerUrl(url) || null : null;
-    if (value && Platform.OS === 'ios' && isInsecureHttpUrl(value)) {
+    if (value && Platform.OS === 'ios' && isInsecureRemoteHttpUrl(value)) {
       throw new Error('iOS requires an HTTPS server URL. Use https:// for your RompMusic server.');
     }
     if (value) {
@@ -77,7 +85,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   restoreServerUrl: async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored && Platform.OS === 'ios' && isInsecureHttpUrl(stored)) {
+      if (stored && Platform.OS === 'ios' && isInsecureRemoteHttpUrl(stored)) {
         await AsyncStorage.removeItem(STORAGE_KEY);
         set({ serverUrl: null, isRestored: true });
         return;

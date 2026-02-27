@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { configureFonts, MD2DarkTheme, PaperProvider } from 'react-native-paper';
 
 import AppNavigator from './src/navigation/AppNavigator';
+import { AppErrorBoundary } from './src/components/AppErrorBoundary';
 import { useAuthStore } from './src/store/authStore';
 import { useSettingsStore } from './src/store/settingsStore';
 import { useServerStore } from './src/store/serverStore';
@@ -50,11 +51,27 @@ function AppContent() {
   const restoreSettings = useSettingsStore((s) => s.restoreSettings);
 
   useEffect(() => {
-    initAudio().catch(() => {});
     (async () => {
-      await restoreServerUrl();
-      restoreSession();
-      restoreSettings();
+      try {
+        await initAudio();
+      } catch (error) {
+        console.error('Audio initialization failed', error);
+      }
+      try {
+        await restoreServerUrl();
+      } catch (error) {
+        console.error('Server URL restoration failed', error);
+      }
+      try {
+        await restoreSession();
+      } catch (error) {
+        console.error('Session restoration failed', error);
+      }
+      try {
+        await restoreSettings();
+      } catch (error) {
+        console.error('Settings restoration failed', error);
+      }
     })();
   }, [restoreServerUrl, restoreSession, restoreSettings]);
 
@@ -73,7 +90,9 @@ export default function App() {
       <PaperProvider theme={theme}>
         <SafeAreaProvider>
           <StatusBar style="light" />
-          <AppContent />
+          <AppErrorBoundary>
+            <AppContent />
+          </AppErrorBoundary>
         </SafeAreaProvider>
       </PaperProvider>
     </QueryClientProvider>

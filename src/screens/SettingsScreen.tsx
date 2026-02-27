@@ -9,7 +9,7 @@ import { Text, List, Button, Switch, Menu, Dialog, Portal, TextInput } from 'rea
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useServerStore, normalizeServerUrl, isInsecureHttpUrl } from '../store/serverStore';
+import { useServerStore, normalizeServerUrl, isInsecureRemoteHttpUrl } from '../store/serverStore';
 import { getWebsiteBaseUrl } from '../utils/publicWebsiteUrl';
 
 
@@ -54,8 +54,8 @@ export default function SettingsScreen() {
       setServerError('Please enter a valid server URL (e.g. https://music.example.com)');
       return;
     }
-    if (Platform.OS === 'ios' && isInsecureHttpUrl(normalized)) {
-      setServerError('iOS requires HTTPS server URLs. Use https://music.example.com');
+    if (Platform.OS === 'ios' && isInsecureRemoteHttpUrl(normalized)) {
+      setServerError('iOS requires https:// for remote servers. Use https://your-server.example.com');
       return;
     }
     setServerSaving(true);
