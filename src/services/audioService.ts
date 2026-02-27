@@ -2,15 +2,17 @@
  * Copyright (C) 2024 RompMusic Contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Audio service - configures expo-audio for playback.
+ * Audio service - configures expo-av for gapless playback.
  */
 
-import { setAudioModeAsync } from 'expo-audio';
+import { Audio } from 'expo-av';
 
 export async function initAudio() {
-  await setAudioModeAsync({
-    playsInSilentMode: true,
-    shouldPlayInBackground: true,
-    interruptionMode: 'duckOthers',
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: true,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,
   });
 }

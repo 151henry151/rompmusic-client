@@ -2,7 +2,7 @@
   "expo": {
     "name": "RompMusic",
     "slug": "rompmusic-client",
-    "version": "0.1.0-beta.3",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,10 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rompmusic.app",
-      "infoPlist": {
-        "UIBackgroundModes": ["audio"]
-      }
+      "bundleIdentifier": "com.rompmusic.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -36,7 +33,13 @@
     },
     "plugins": [
       "expo-secure-store",
-      ["expo-build-properties", { "android": { "targetSdkVersion": 34 } }]
-    ]
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "50819680-9c91-491a-8082-6aeb917ee909"
+      }
+    },
+    "owner": "romp"
   }
 }

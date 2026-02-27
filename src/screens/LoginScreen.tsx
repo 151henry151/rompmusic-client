@@ -3,23 +3,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, Image, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
-import type { RootStackParamList } from '../navigation/types';
-import { getWebBasePath } from '../utils/webBasePath';
-
-type Props = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const passwordRef = useRef<any>(null);
   const { login, isLoading } = useAuthStore();
-  const navigation = useNavigation<Props>();
+  const navigation = useNavigation();
 
   const handleLogin = async () => {
     if (!username.trim() || !password) {
@@ -28,7 +22,6 @@ export default function LoginScreen() {
     }
     try {
       await login(username.trim(), password);
-      (navigation as any).goBack?.();
     } catch (e) {
       Alert.alert('Login failed', e instanceof Error ? e.message : 'Invalid credentials');
     }
@@ -40,21 +33,6 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <View style={styles.box}>
-        <View style={styles.logoWrap}>
-          <Pressable
-            onPress={() => {
-              if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                window.location.href = `${window.location.origin}/${getWebBasePath()}`;
-              } else {
-                (navigation as any).navigate('App');
-              }
-            }}
-            accessibilityRole="link"
-            accessibilityLabel="RompMusic home"
-          >
-            <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="RompMusic logo" />
-          </Pressable>
-        </View>
         <Text variant="headlineMedium" style={styles.title}>
           RompMusic
         </Text>
@@ -69,19 +47,14 @@ export default function LoginScreen() {
           autoCorrect={false}
           style={styles.input}
           disabled={isLoading}
-          returnKeyType="next"
-          onSubmitEditing={() => passwordRef.current?.focus()}
         />
         <TextInput
-          ref={passwordRef}
           label="Password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           style={styles.input}
           disabled={isLoading}
-          returnKeyType="go"
-          onSubmitEditing={handleLogin}
         />
         <Button
           mode="contained"
@@ -94,7 +67,7 @@ export default function LoginScreen() {
         </Button>
         <Button
           mode="text"
-          onPress={() => navigation.navigate('ForgotPassword', {})}
+          onPress={() => navigation.navigate('ForgotPassword')}
           disabled={isLoading}
           style={styles.forgotButton}
         >
@@ -129,14 +102,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
     padding: 24,
-  },
-  logoWrap: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  logo: {
-    width: 80,
-    height: 80,
   },
   title: {
     textAlign: 'center',

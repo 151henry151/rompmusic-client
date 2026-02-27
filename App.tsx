@@ -4,65 +4,24 @@
  */
 
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { configureFonts, MD2DarkTheme, PaperProvider } from 'react-native-paper';
+import { MD3DarkTheme, PaperProvider } from 'react-native-paper';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { useAuthStore } from './src/store/authStore';
-import { useSettingsStore } from './src/store/settingsStore';
-import { useServerStore } from './src/store/serverStore';
 import { initAudio } from './src/services/audioService';
 
 const queryClient = new QueryClient();
 
-const fontConfig = {
-  web: {
-    regular: { fontFamily: 'Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif', fontWeight: '400' as const },
-    medium: { fontFamily: 'Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif', fontWeight: '500' as const },
-    light: { fontFamily: 'Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif', fontWeight: '300' as const },
-    thin: { fontFamily: 'Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif', fontWeight: '100' as const },
-  },
-  ios: {
-    regular: { fontFamily: 'System', fontWeight: '400' as const },
-    medium: { fontFamily: 'System', fontWeight: '500' as const },
-    light: { fontFamily: 'System', fontWeight: '300' as const },
-    thin: { fontFamily: 'System', fontWeight: '100' as const },
-  },
-  android: {
-    regular: { fontFamily: 'sans-serif', fontWeight: 'normal' as const },
-    medium: { fontFamily: 'sans-serif-medium', fontWeight: 'normal' as const },
-    light: { fontFamily: 'sans-serif-light', fontWeight: 'normal' as const },
-    thin: { fontFamily: 'sans-serif-thin', fontWeight: 'normal' as const },
-  },
-} as const;
-
-const theme = {
-  ...MD2DarkTheme,
-  fonts: configureFonts({ config: fontConfig, isV3: false }),
-};
-
 function AppContent() {
-  const restoreServerUrl = useServerStore((s) => s.restoreServerUrl);
   const restoreSession = useAuthStore((s) => s.restoreSession);
-  const restoreSettings = useSettingsStore((s) => s.restoreSettings);
 
   useEffect(() => {
     initAudio().catch(() => {});
-    (async () => {
-      await restoreServerUrl();
-      restoreSession();
-      restoreSettings();
-    })();
-  }, [restoreServerUrl, restoreSession, restoreSettings]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      document.title = 'ROMPMUSIC';
-    }
-  }, []);
+    restoreSession();
+  }, [restoreSession]);
 
   return <AppNavigator />;
 }
@@ -70,10 +29,59 @@ function AppContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <PaperProvider theme={theme}>
+      <PaperProvider theme={MD3DarkTheme}>
         <SafeAreaProvider>
           <StatusBar style="light" />
-          <AppContent />
+          <AppErrorBoundary>
+            <AppContent />
+          </AppErrorBoundary>
+        </SafeAreaProvider>
+      </PaperProvider>
+    </QueryClientProvider>
+  );
+}
+>
+  );
+}
+  </PaperProvider>
+    </QueryClientProvider>
+  );
+}
+lex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a', padding: 24 },
+        text: { color: '#fff', fontSize: 18, marginBottom: 8 },
+        subtext: { color: '#888', fontSize: 14, textAlign: 'center' },
+      });
+      return (
+        <View style={styles.container}>
+          <Text style={styles.text}>Something went wrong.</Text>
+          <Text style={styles.subtext}>{this.state.error.message}</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppContent() {
+  const restoreSession = useAuthStore((s) => s.restoreSession);
+
+  useEffect(() => {
+    initAudio().catch(() => {});
+    restoreSession();
+  }, [restoreSession]);
+
+  return <AppNavigator />;
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PaperProvider theme={MD3DarkTheme}>
+        <SafeAreaProvider>
+          <StatusBar style="light" />
+          <AppErrorBoundary>
+            <AppContent />
+          </AppErrorBoundary>
         </SafeAreaProvider>
       </PaperProvider>
     </QueryClientProvider>
