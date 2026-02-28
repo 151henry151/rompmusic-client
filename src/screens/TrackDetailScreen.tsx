@@ -40,10 +40,11 @@ export default function TrackDetailScreen() {
   const swipeDownResponder = React.useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, gesture) =>
+        onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
           scrollOffsetYRef.current <= 0 &&
           gesture.dy > 16 &&
-          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2,
+          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.1,
+        onPanResponderTerminationRequest: () => false,
         onPanResponderRelease: (_evt, gesture) => {
           if (dismissTriggeredRef.current) return;
           if (gesture.dy > 90 && gesture.vy > 0.25) {
