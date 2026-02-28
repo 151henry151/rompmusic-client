@@ -23,7 +23,7 @@ export default function HistoryScreen() {
 
   const { data: tracks, isLoading, isError, error } = useQuery({
     queryKey: ['recently-played'],
-    queryFn: () => api.getRecentlyPlayed(100),
+    queryFn: () => api.getRecentlyPlayed(),
     retry: false,
   });
 

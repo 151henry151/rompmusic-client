@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-beta.13] - 2026-02-28
+
 ### Added
 
 - **Account deletion** — Settings → "Delete account" (Account section) with native confirmation; calls `DELETE /auth/me` then clears token and user. Required for App Store compliance.
-- **Mobile store readiness** — iOS: `UIBackgroundModes: ["audio"]` in app.json for background playback. Android: expo-build-properties with `targetSdkVersion: 34` for Play Store. Version in app.json set to 0.1.0-beta.3; About screen reads version from `Constants.expoConfig?.version`. `.env.example` documents `EXPO_PUBLIC_WEBSITE_URL` for Privacy/Terms links.
 
 ### Changed
 
+- **Unified mobile branch work** — Combined `cursor/android-app-launch-crash-3dea` and `cursor/ios-app-readiness-edc4` into one client line (startup hardening, server setup flow, login fallback handling, media control updates, Android launch fixes, iOS readiness and EAS metadata).
+- **Mobile store readiness** — iOS: `UIBackgroundModes: ["audio"]` and `ITSAppUsesNonExemptEncryption: false` in `app.json`. Android: expo-build-properties with `targetSdkVersion: 34`. App version now synced to `0.1.0-beta.13`.
 - **Native deep-link handling** — Navigation linking now includes native prefixes (`rompmusic://`, website URLs) so iOS builds can resolve incoming app/website links to in-app routes.
 - **Share URL generation** — Album/track share URLs now use a shared website-base utility (`EXPO_PUBLIC_WEBSITE_URL` fallback) instead of browser-specific fallbacks.
 - **Server URL validation on iOS** — Server setup/settings now block insecure `http://` server URLs on iOS with a clear HTTPS requirement message.
@@ -22,9 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **EAS build metadata** — Linked this client to the existing EAS project ID/owner in `app.json`, and set `cli.appVersionSource` to `local` in `eas.json` so CI/terminal builds do not block on version-source prompts.
 - **Server setup copy parity** — First-launch server setup now matches Android wording (`Enter your server URL or IP address.`) with a `https://rompmusic.com` default/placeholder to make onboarding behavior consistent across mobile apps.
 - **Server setup continue flow parity** — App navigator now subscribes to `serverUrl` directly so saving a first-run server URL immediately exits setup on native builds.
+- **Manual test status** — Android app has been tested and is working; iOS app has not yet been tested.
 
 ### Fixed
 
+- **Play history loading** — History screen now requests `/library/tracks/recently-played` without forcing `limit=100`, preventing validation errors and aligning with full-history server behavior.
 - **Persisted insecure server URLs on iOS** — Stored `http://` server URLs are now cleared during restore on iOS to avoid silent networking failures from App Transport Security.
 - **iOS export compliance prompt** — Added `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` to reduce App Store Connect manual export-compliance setup for standard HTTPS-only client behavior.
 - **Startup crash hardening parity** — App startup now awaits/catches `initAudio`, `restoreServerUrl`, `restoreSession`, and `restoreSettings`, and wraps the root app content in `AppErrorBoundary` to prevent native startup crashes from unhandled promise rejections.
@@ -122,7 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Queue / "play next" bug: playing an album then choosing "play next" on another song could show the wrong track playing (second album track) while UI showed the "play next" song. Fixed by clearing preload and preloading the new next track when the queue changes.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.6...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.13...HEAD
+[0.1.0-beta.13]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.11...v0.1.0-beta.13
 [0.1.0-beta.6]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.4

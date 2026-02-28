@@ -143,6 +143,10 @@ export const api = {
     return fetchApi('/auth/me');
   },
 
+  async deleteAccount() {
+    return fetchApi('/auth/me', { method: 'DELETE' });
+  },
+
   getStreamUrl(trackId: number, format?: 'original' | 'ogg') {
     const apiBase = getApiBase();
     const base = `${apiBase.replace(/\/api\/v1\/?$/, '')}/api/v1/stream/${trackId}`;
@@ -185,8 +189,9 @@ export const api = {
     return fetchApi(`/library/tracks/recently-added?limit=${limit}`);
   },
 
-  async getRecentlyPlayed(limit = 20) {
-    return fetchApi(`/library/tracks/recently-played?limit=${limit}`);
+  async getRecentlyPlayed(limit?: number) {
+    const qs = typeof limit === 'number' ? `?limit=${limit}` : '';
+    return fetchApi(`/library/tracks/recently-played${qs}`);
   },
 
   async getMostPlayed(limit = 20) {

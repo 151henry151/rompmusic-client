@@ -40,7 +40,7 @@ export default function SettingsScreen() {
   const displayServerUrl = getDisplayServerUrl();
 
   const WEBSITE_BASE = getWebsiteBaseUrl();
-  const appVersion = Constants.expoConfig?.version ?? '0.1.0-beta.3';
+  const appVersion = Constants.expoConfig?.version ?? '0.1.0-beta.13';
 
   useEffect(() => {
     restoreSettings();
