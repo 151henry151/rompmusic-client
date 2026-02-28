@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Platform } from 'react-native';
 import { useServerStore } from '../store/serverStore';
 
 /** Resolve API base URL from server store (user-configured or env for demo build). */
@@ -34,16 +35,18 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   const base = getApiBase();
   const url = path.startsWith('http') ? path : `${base}${path}`;
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json; charset=utf-8',
     ...(opts.headers as Record<string, string>),
   };
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials: 'include' });
+  const credentials = (opts as RequestInit & { credentials?: RequestCredentials }).credentials
+    ?? 'include';
+  const res = await fetch(url, { ...opts, headers, cache: 'no-store', credentials });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || `HTTP ${res.status}`);
+    throw new Error(parseApiError(err) || `HTTP ${res.status}`);
   }
   if (res.headers.get('content-type')?.includes('application/json')) {
     return res.json();
@@ -51,13 +54,61 @@ async function fetchApi(path: string, opts: RequestInit = {}) {
   return res.text();
 }
 
+/** Parse API error response (e.g. {"detail":"Invalid username or password"}) into a readable message. */
+function parseApiError(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed?.detail === 'string' ? parsed.detail : text;
+  } catch {
+    return text;
+  }
+}
+
 export const api = {
   async login(username: string, password: string) {
-    const data = await fetchApi('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
-    return data.access_token;
+    const trimmedUsername = username.trim();
+    const usernameCandidates: string[] = [];
+    const pushUnique = (value: string) => {
+      if (value && !usernameCandidates.includes(value)) usernameCandidates.push(value);
+    };
+    pushUnique(trimmedUsername);
+    if (/[A-Z]/.test(trimmedUsername)) pushUnique(trimmedUsername.toLowerCase());
+    if (trimmedUsername.includes('@')) {
+      const localPart = trimmedUsername.split('@')[0]?.trim() ?? '';
+      pushUnique(localPart);
+      if (/[A-Z]/.test(localPart)) pushUnique(localPart.toLowerCase());
+    }
+
+    const passwordCandidates = [password];
+    const trimmedPassword = password.trim();
+    if (trimmedPassword && trimmedPassword !== password) {
+      passwordCandidates.push(trimmedPassword);
+    }
+
+    let lastInvalidCredError: unknown;
+    const isInvalidCredentialError = (error: unknown) =>
+      (error instanceof Error ? error.message.toLowerCase() : '').includes('invalid username or password');
+
+    for (const userCandidate of usernameCandidates) {
+      for (const passCandidate of passwordCandidates) {
+        try {
+          const data = await fetchApi('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username: userCandidate, password: passCandidate }),
+            credentials: Platform.OS === 'web' ? 'include' : 'omit',
+          });
+          return data.access_token;
+        } catch (error) {
+          if (isInvalidCredentialError(error)) {
+            lastInvalidCredError = error;
+            continue;
+          }
+          throw error;
+        }
+      }
+    }
+
+    throw lastInvalidCredError ?? new Error('Invalid username or password');
   },
 
   async register(username: string, email: string, password: string) {
@@ -90,10 +141,6 @@ export const api = {
 
   async getMe() {
     return fetchApi('/auth/me');
-  },
-
-  async deleteAccount() {
-    return fetchApi('/auth/me', { method: 'DELETE' });
   },
 
   getStreamUrl(trackId: number, format?: 'original' | 'ogg') {

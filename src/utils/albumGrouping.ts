@@ -100,15 +100,16 @@ export function getBaseReleaseKey(title: string, year?: number | null): string {
 }
 
 /**
- * Group albums by same artwork when hash is set; otherwise by title + year only.
- * So one release (e.g. "Doo-Bop") is one entry even when tracks have different
- * artists (e.g. "Miles Davis" vs "Miles Davis Feat. Easy Mo Bee").
+ * Group albums by same artwork when hash is set; otherwise by primary artist + title + year
+ * so that collaboration variants (e.g. "All. Right. Now." by Satsang vs Satsang/G. Love) and
+ * multi-artist same-title albums (e.g. "Amy") merge into one entry.
  */
 export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): AlbumGroup[] {
   const byKey = new Map<string, T[]>();
   for (const a of albums) {
-    const releaseKey = `${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
-    const key = a.artwork_hash ?? `__release:${releaseKey}`;
+    const primaryArtist = getPrimaryArtistName(a.artist_name || 'Unknown').toLowerCase().trim() || '\0';
+    const collabKey = `${primaryArtist}|${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
+    const key = a.artwork_hash ?? `__collab:${collabKey}`;
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(a);
   }

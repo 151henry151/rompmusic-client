@@ -48,6 +48,7 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
   const token = useAuthStore((s) => s.token);
   let uri = api.getArtworkUrl(type, id);
   if (token) uri += (uri.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  const uriInvalid = !uri || typeof uri !== 'string' || uri.includes('undefined');
 
   const radius = borderRadius ?? size / 8;
   const boxStyle = { width: size, height: size, borderRadius: radius };
@@ -73,6 +74,15 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
   }
 
   if (failed) {
+    return (
+      <View style={[styles.placeholder, boxStyle, style]}>
+        <Icon source="music" size={size * 0.5} color="#666" />
+      </View>
+    );
+  }
+
+  // Guard: invalid URI can crash native Image on Android
+  if (Platform.OS !== 'web' && uriInvalid) {
     return (
       <View style={[styles.placeholder, boxStyle, style]}>
         <Icon source="music" size={size * 0.5} color="#666" />

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, Platform, Share, Alert } from 'react-native';
+import { ScrollView, StyleSheet, Platform, Share, Alert, View, PanResponder } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -34,6 +34,29 @@ export default function TrackDetailScreen() {
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
+  const scrollOffsetYRef = React.useRef(0);
+  const dismissTriggeredRef = React.useRef(false);
+
+  const swipeDownResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_evt, gesture) =>
+          scrollOffsetYRef.current <= 0 &&
+          gesture.dy > 16 &&
+          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2,
+        onPanResponderRelease: (_evt, gesture) => {
+          if (dismissTriggeredRef.current) return;
+          if (gesture.dy > 90 && gesture.vy > 0.25) {
+            dismissTriggeredRef.current = true;
+            navigation.goBack();
+            setTimeout(() => {
+              dismissTriggeredRef.current = false;
+            }, 300);
+          }
+        },
+      }),
+    [navigation]
+  );
 
   const { data: track, isLoading } = useQuery({
     queryKey: ['track', trackId],
@@ -42,9 +65,11 @@ export default function TrackDetailScreen() {
 
   if (isLoading || !track) {
     return (
-      <ScrollView style={styles.container}>
-        <Text style={styles.muted}>Loading...</Text>
-      </ScrollView>
+      <View style={styles.container} {...swipeDownResponder.panHandlers}>
+        <ScrollView style={styles.scroll}>
+          <Text style={styles.muted}>Loading...</Text>
+        </ScrollView>
+      </View>
     );
   }
 
@@ -106,36 +131,45 @@ export default function TrackDetailScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
-      <Text variant="headlineSmall" style={styles.title}>
-        {track.title}
-      </Text>
-      <Text variant="bodyLarge" style={styles.artist} onPress={handleArtistPress}>
-        {track.artist_name || 'Unknown'}
-      </Text>
-      <Text variant="bodyMedium" style={styles.album} onPress={handleAlbumPress}>
-        {track.album_title || 'Unknown Album'}
-      </Text>
-      <Text variant="bodySmall" style={styles.duration}>
-        {formatDuration(track.duration)}
-      </Text>
-      <Button mode="contained" onPress={handlePlay} style={styles.playButton} icon="play">
-        Play
-      </Button>
-      <Button mode="outlined" onPress={() => addToQueue(track)} style={styles.albumButton} icon="playlist-plus">
-        Add to queue
-      </Button>
-      <Button mode="outlined" onPress={() => playNext(track)} style={styles.albumButton} icon="play-circle">
-        Play next
-      </Button>
-      <Button mode="outlined" onPress={handleViewAlbum} style={styles.albumButton} icon="album">
-        View album
-      </Button>
-      <Button mode="outlined" onPress={handleShare} style={styles.albumButton} icon="share-variant">
-        Share
-      </Button>
-    </ScrollView>
+    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        onScroll={(e) => {
+          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+      >
+        <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
+        <Text variant="headlineSmall" style={styles.title}>
+          {track.title}
+        </Text>
+        <Text variant="bodyLarge" style={styles.artist} onPress={handleArtistPress}>
+          {track.artist_name || 'Unknown'}
+        </Text>
+        <Text variant="bodyMedium" style={styles.album} onPress={handleAlbumPress}>
+          {track.album_title || 'Unknown Album'}
+        </Text>
+        <Text variant="bodySmall" style={styles.duration}>
+          {formatDuration(track.duration)}
+        </Text>
+        <Button mode="contained" onPress={handlePlay} style={styles.playButton} icon="play">
+          Play
+        </Button>
+        <Button mode="outlined" onPress={() => addToQueue(track)} style={styles.albumButton} icon="playlist-plus">
+          Add to queue
+        </Button>
+        <Button mode="outlined" onPress={() => playNext(track)} style={styles.albumButton} icon="play-circle">
+          Play next
+        </Button>
+        <Button mode="outlined" onPress={handleViewAlbum} style={styles.albumButton} icon="album">
+          View album
+        </Button>
+        <Button mode="outlined" onPress={handleShare} style={styles.albumButton} icon="share-variant">
+          Share
+        </Button>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -143,6 +177,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
     padding: 24,

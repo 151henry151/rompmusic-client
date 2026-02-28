@@ -29,7 +29,6 @@ function getStreamFormat(): 'original' | 'ogg' {
 
 /** Start prestarting (play next at volume 0) this many seconds before end so it has time to load. Load time can be ~12s with transcoding or slow networks. */
 const PRESTART_BEFORE_END_SEC = 15;
-function clearCurrentPlayerRefs(): void { sound = null; nextSound = null; prestartedNext = false; }
 /** Consider track ended and promote next this many seconds before actual end (short overlap for gapless). */
 const PROMOTE_BEFORE_END_SEC = 0.02;
 
@@ -79,6 +78,8 @@ let nextSound: AudioPlayer | null = null;
 let prestartedNext = false;
 /** All active players so we can stop every one before starting new playback (avoids multiple tracks playing). */
 const activePlayers = new Set<AudioPlayer>();
+let suppressRemoteSkipDetectionUntil = 0;
+let remoteSkipInFlight = false;
 
 function stopAndRemoveAllPlayers(): void {
   for (const p of activePlayers) {
@@ -114,24 +115,41 @@ function removePlayer(p: AudioPlayer | null): void {
   activePlayers.delete(p);
 }
 
-function removeStalePlayers(): void {
-  const keep = sound;
-  const keepNext = nextSound;
-  for (const p of Array.from(activePlayers)) {
-    if (p !== keep && p !== keepNext) {
-      try { p.pause(); } catch { }
-      try { p.remove(); } catch { }
-      activePlayers.delete(p);
-    }
-  }
-}
-
 function getStreamUrl(track: Track): string {
   const format = getStreamFormat();
   let url = api.getStreamUrl(track.id, format);
   const t = getToken();
   if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
   return url;
+}
+
+function getArtworkMetadataUrl(track: Track): string {
+  let url = api.getArtworkUrl('album', track.album_id);
+  const t = getToken();
+  if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
+  return url;
+}
+
+/**
+ * Expo Audio currently maps some headset/car media commands to seek-by-interval actions.
+ * Detect those ±10s jumps and map them to queue previous/next track behavior.
+ */
+function handleRemoteTrackCommandFromSeekDelta(deltaSeconds: number): boolean {
+  const now = Date.now();
+  if (now < suppressRemoteSkipDetectionUntil || remoteSkipInFlight) return false;
+  const abs = Math.abs(deltaSeconds);
+  if (abs < 8.5 || abs > 11.5) return false;
+  remoteSkipInFlight = true;
+  suppressRemoteSkipDetectionUntil = now + 1200;
+  const action = deltaSeconds > 0
+    ? usePlayerStore.getState().skipToNext
+    : usePlayerStore.getState().skipToPrevious;
+  Promise.resolve(action()).finally(() => {
+    setTimeout(() => {
+      remoteSkipInFlight = false;
+    }, 350);
+  });
+  return true;
 }
 
 function loadAndPlay(
@@ -150,6 +168,7 @@ function loadAndPlay(
   }
   let finished = false;
   let startedNotified = false;
+  let lastObservedPos = position;
   player.addListener('playbackStatusUpdate', (status) => {
     onPositionUpdate(status.currentTime);
     if (onPlaybackStarted && !startedNotified && (status.isLoaded || (status.currentTime ?? 0) > 0)) {
@@ -158,17 +177,15 @@ function loadAndPlay(
     }
     const dur = status.duration ?? 0;
     const pos = status.currentTime ?? 0;
-    if (dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
-      if (Platform.OS === 'web' && !nextSound) {
-        const { queue, currentIndex } = get();
-        const nxt = queue[currentIndex + 1];
-        if (nxt) nextSound = preloadNext(nxt);
-      }
-      if (!prestartedNext && nextSound) {
-        prestartedNext = true;
-        nextSound.volume = 0;
-        nextSound.play();
-      }
+    if (Platform.OS !== 'web') {
+      const delta = pos - lastObservedPos;
+      if (handleRemoteTrackCommandFromSeekDelta(delta)) return;
+      lastObservedPos = pos;
+    }
+    if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
+      prestartedNext = true;
+      nextSound.volume = 0;
+      nextSound.play();
     }
     const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
     if (!finished && (status.didJustFinish || atEnd)) {
@@ -194,19 +211,32 @@ function preloadNext(track: Track): AudioPlayer | null {
 /** Update lock screen / Now Playing metadata (iOS/Android). No-op on web. */
 function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null): void {
   if (!player) return;
-  const setActive = (player as { setActiveForLockScreen?(active: boolean, metadata?: Record<string, string>): void }).setActiveForLockScreen;
+  const setActive = (player as {
+    setActiveForLockScreen?(
+      active: boolean,
+      metadata?: Record<string, string | undefined>,
+      options?: { showSeekForward?: boolean; showSeekBackward?: boolean }
+    ): void;
+  }).setActiveForLockScreen;
+  const updateMetadata = (player as {
+    updateLockScreenMetadata?(metadata: Record<string, string | undefined>): void;
+  }).updateLockScreenMetadata;
   if (!setActive) return;
   if (!track) {
     setActive.call(player, false);
     return;
   }
-  const metadata: Record<string, string> = {
+  const metadata = {
     title: track.title,
     artist: track.artist_name || 'Unknown',
-    artworkUrl: api.getArtworkUrl('album', track.album_id),
+    albumTitle: track.album_title,
+    artworkUrl: getArtworkMetadataUrl(track),
   };
-  if (track.album_title) metadata.albumTitle = track.album_title;
-  setActive.call(player, true, metadata);
+  setActive.call(player, true, metadata, {
+    showSeekForward: true,
+    showSeekBackward: true,
+  });
+  updateMetadata?.call(player, metadata);
 }
 
 /** Call play(); if not loaded yet, call again when isLoaded (keeps preload, no extra request). */
@@ -270,9 +300,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
         sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
         setLockScreenMetadata(sound, currentTrack);
-        // On web, defer preloading next track until prestart window to avoid creating a second
-        // player (and its async replace()) while the first is loading — that can abort the first fetch.
-        if (nextTrack && Platform.OS !== 'web') nextSound = preloadNext(nextTrack);
+        if (nextTrack) nextSound = preloadNext(nextTrack);
         // Keep isLoading true until onPlaybackStarted fires (stream has started)
       }
     } catch (e) {
@@ -293,12 +321,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   seekTo: async (seconds: number) => {
     if (sound) {
+      suppressRemoteSkipDetectionUntil = Date.now() + 1600;
       await sound.seekTo(seconds);
       set({ position: seconds });
     }
   },
 
   skipToNext: async () => {
+    suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
     if (currentIndex + 1 >= queue.length) {
       if (autoplayEnabled && currentTrack) {
@@ -349,21 +379,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await sound.seekTo(0);
       sound.volume = currentVolume;
       let finished = false;
+      let lastObservedPos = 0;
       sound.addListener('playbackStatusUpdate', (status) => {
         set({ position: status.currentTime });
         const dur = status.duration ?? 0;
         const pos = status.currentTime ?? 0;
-        if (dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
-          if (Platform.OS === 'web' && !nextSound) {
-            const { queue, currentIndex } = get();
-            const nxt = queue[currentIndex + 1];
-            if (nxt) nextSound = preloadNext(nxt);
-          }
-          if (!prestartedNext && nextSound) {
-            prestartedNext = true;
-            nextSound.volume = 0;
-            nextSound.play();
-          }
+        if (Platform.OS !== 'web') {
+          const delta = pos - lastObservedPos;
+          if (handleRemoteTrackCommandFromSeekDelta(delta)) return;
+          lastObservedPos = pos;
+        }
+        if (!prestartedNext && nextSound && dur > 0 && pos >= Math.max(0, dur - PRESTART_BEFORE_END_SEC)) {
+          prestartedNext = true;
+          nextSound.volume = 0;
+          nextSound.play();
         }
         const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
         if (!finished && (status.didJustFinish || atEnd)) {
@@ -376,7 +405,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       setLockScreenMetadata(sound, nextTrack);
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
-      if (nextNext && Platform.OS !== 'web') nextSound = preloadNext(nextNext);
+      if (nextNext) nextSound = preloadNext(nextNext);
     } else {
       prestartedNext = false;
       removePlayer(sound);
@@ -387,6 +416,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   skipToPrevious: async () => {
+    suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     const { position, queue, currentIndex } = get();
     if (position > 3 && sound) {
       sound.seekTo(0);
@@ -410,11 +440,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const idx = tracks.findIndex((t) => t.id === track.id);
     const startIndex = idx >= 0 ? idx : 0;
     set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration, autoplayStartIndex: null });
-    // Do not await: on iOS Safari, play() must run in the same synchronous turn as the user gesture (tap).
-    // Awaiting would yield and break the gesture chain, so playback would stay at 0.
-    get().play().catch((e) => {
-      set({ isLoading: false, error: e instanceof Error ? e.message : 'Playback failed' });
-    });
+    await get().play();
   },
 
   addToQueue: (tracks) => {

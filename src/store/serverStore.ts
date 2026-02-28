@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Server URL (API base) configuration. Persisted so first-run can prompt, and
- * editable in Settings. Web can use EXPO_PUBLIC_API_URL as a preconfigured
- * default, while native apps prompt the user on first launch.
+ * editable in Settings. EXPO_PUBLIC_API_URL can be used as a web/default
+ * fallback, while native setup still requires an explicit saved server URL.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,18 +16,29 @@ const URL_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
 
 /** Normalize user input to a full API base URL (e.g. https://music.example.com -> https://music.example.com/api/v1). */
 export function normalizeServerUrl(input: string): string {
-  const raw = input.trim();
-  if (!raw) return raw;
-  const withScheme = URL_SCHEME_REGEX.test(raw) ? raw : `https://${raw}`;
-  let parsed: URL;
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  const withScheme = URL_SCHEME_REGEX.test(trimmed) ? trimmed : `https://${trimmed}`;
+
   try {
-    parsed = new URL(withScheme);
+    const parsed = new URL(withScheme);
+    const cleanPath = parsed.pathname.replace(/\/+$/, '');
+    if (/\/api\/v1$/i.test(cleanPath)) {
+      parsed.pathname = cleanPath;
+    } else if (!cleanPath || cleanPath === '/') {
+      parsed.pathname = '/api/v1';
+    } else {
+      parsed.pathname = `${cleanPath}/api/v1`;
+    }
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/+$/, '');
   } catch {
-    return withScheme.replace(/\/+$/, '');
+    const fallback = withScheme.replace(/\/+$/, '');
+    if (/\/api\/v1\/?$/i.test(fallback)) return fallback.replace(/\/+$/, '');
+    return `${fallback}/api/v1`;
   }
-  const originAndPath = `${parsed.protocol}//${parsed.host}${parsed.pathname}`.replace(/\/+$/, '');
-  if (/\/api\/v1$/i.test(originAndPath)) return originAndPath;
-  return `${originAndPath}/api/v1`;
 }
 
 /** Returns true when URL uses insecure HTTP for a non-local host. */
@@ -51,7 +62,7 @@ interface ServerState {
   restoreServerUrl: () => Promise<void>;
   /** Effective API base: stored URL, or env, or default. Sync for use in api client. */
   getApiBase: () => string;
-  /** True if user has configured a server (stored) or web build is preconfigured (env set). */
+  /** True if user has configured a server (stored), or web build has env preconfiguration. */
   hasConfiguredServer: () => boolean;
   /** Human-readable server URL for display (without /api/v1). Null if no configured server. */
   getDisplayServerUrl: () => string | null;

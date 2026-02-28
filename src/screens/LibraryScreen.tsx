@@ -27,7 +27,8 @@ const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
 /** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
 const LIBRARY_ARTISTS_PAGE_SIZE = 80;
-const LIBRARY_ALBUMS_PAGE_SIZE = 80;
+/** Android: smaller initial page to avoid OOM/native crash from 80+ concurrent Image loads. */
+const LIBRARY_ALBUMS_PAGE_SIZE = Platform.OS === 'android' ? 24 : 80;
 /** When sort is Random, fetch one large page (no pagination) so each refresh gives a single new random order. */
 const LIBRARY_ALBUMS_RANDOM_LIMIT = 500;
 const LIBRARY_TRACKS_PAGE_SIZE = 1000;
@@ -215,7 +216,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
-  const cardsPerRow = isMobile ? 3 : 5;
+  const cardsPerRow = isMobile ? 4 : 5;
   const cardWidth = Math.max(100, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
   const currentSortBy = tab === 'artists' ? sortBy.artists : sortBy.albums;
@@ -533,10 +534,18 @@ export default function LibraryScreen() {
       const headerNode = sectionHeaderRefsRef.current[key];
       const contentNode = scrollContentRef.current;
       if (headerNode && contentNode && typeof (headerNode as any).measureLayout === 'function') {
-        (headerNode as any).measureLayout(contentNode, 0, 0, (_x: number, y: number) => {
-          scrollToOffset(y);
-        });
-        return true;
+        try {
+          (headerNode as any).measureLayout(
+            contentNode,
+            (_x: number, y: number) => {
+              scrollToOffset(y);
+            },
+            () => {}
+          );
+          return true;
+        } catch {
+          return false;
+        }
       }
       return false;
     },
@@ -886,10 +895,18 @@ export default function LibraryScreen() {
               const headerNode = sectionHeaderRefsRef.current[key];
               const contentNode = scrollContentRef.current;
               if (headerNode && contentNode && typeof (headerNode as any).measureLayout === 'function') {
-                (headerNode as any).measureLayout(contentNode, 0, 0, (_x: number, y: number) => {
-                  sectionOffsetsRef.current[key] = y;
-                  if (key === targetSectionToScrollRef.current) scrollToOffsetRef.current(y);
-                });
+                try {
+                  (headerNode as any).measureLayout(
+                    contentNode,
+                    (_x: number, y: number) => {
+                      sectionOffsetsRef.current[key] = y;
+                      if (key === targetSectionToScrollRef.current) scrollToOffsetRef.current(y);
+                    },
+                    () => {}
+                  );
+                } catch {
+                  // Ignore transient measurement errors during layout.
+                }
               }
             }
       }

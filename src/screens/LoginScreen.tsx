@@ -17,6 +17,7 @@ type Props = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const passwordRef = useRef<any>(null);
   const { login, isLoading } = useAuthStore();
   const navigation = useNavigation<Props>();
@@ -77,11 +78,18 @@ export default function LoginScreen() {
           label="Password"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
+          secureTextEntry={!passwordVisible}
           style={styles.input}
           disabled={isLoading}
           returnKeyType="go"
           onSubmitEditing={handleLogin}
+          right={
+            <TextInput.Icon
+              icon={passwordVisible ? 'eye-off' : 'eye'}
+              onPress={() => setPasswordVisible((v) => !v)}
+              forceTextInputFocus={false}
+            />
+          }
         />
         <Button
           mode="contained"

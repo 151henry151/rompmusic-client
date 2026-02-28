@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share } from 'react-native';
+import { ScrollView, StyleSheet, View, Platform, Share, PanResponder } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -92,6 +92,29 @@ export default function AlbumDetailScreen() {
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
+  const scrollOffsetYRef = React.useRef(0);
+  const dismissTriggeredRef = React.useRef(false);
+
+  const swipeDownResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_evt, gesture) =>
+          scrollOffsetYRef.current <= 0 &&
+          gesture.dy > 16 &&
+          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2,
+        onPanResponderRelease: (_evt, gesture) => {
+          if (dismissTriggeredRef.current) return;
+          if (gesture.dy > 90 && gesture.vy > 0.25) {
+            dismissTriggeredRef.current = true;
+            navigation.goBack();
+            setTimeout(() => {
+              dismissTriggeredRef.current = false;
+            }, 300);
+          }
+        },
+      }),
+    [navigation]
+  );
 
   const albumQueries = useQueries({
     queries: effectiveAlbumIds.map((id) => ({
@@ -163,16 +186,18 @@ export default function AlbumDetailScreen() {
 
   const playAlbumInProgress = React.useRef(false);
   const handlePlayTrack = useCallback(
-    (track: Track, queue?: Track[]) => {
+    async (track: Track, queue?: Track[]) => {
       const q = queue ?? mergedTracks;
       // Prevent "Play album" from firing multiple times (e.g. overlapping touch targets when multiple editions)
       if (q.length > 1 && track.id === q[0].id && playAlbumInProgress.current) return;
       if (q.length > 1 && track.id === q[0].id) playAlbumInProgress.current = true;
-      // Call playTrack synchronously so iOS Safari keeps the user gesture for audio.play()
-      playTrack(track, q);
-      setTimeout(() => {
-        playAlbumInProgress.current = false;
-      }, 600);
+      try {
+        await playTrack(track, q);
+      } finally {
+        setTimeout(() => {
+          playAlbumInProgress.current = false;
+        }, 600);
+      }
     },
     [mergedTracks, playTrack]
   );
@@ -256,165 +281,177 @@ export default function AlbumDetailScreen() {
 
   if (effectiveAlbumIds.length === 0) {
     return (
-      <ScrollView style={styles.container}>
-        <Text style={styles.muted}>No album selected.</Text>
-      </ScrollView>
+      <View style={styles.container} {...swipeDownResponder.panHandlers}>
+        <ScrollView style={styles.scroll}>
+          <Text style={styles.muted}>No album selected.</Text>
+        </ScrollView>
+      </View>
     );
   }
 
   if (isLoading || !primaryAlbum) {
     return (
-      <ScrollView style={styles.container}>
-        <Text style={styles.muted}>Loading...</Text>
-      </ScrollView>
+      <View style={styles.container} {...swipeDownResponder.panHandlers}>
+        <ScrollView style={styles.scroll}>
+          <Text style={styles.muted}>Loading...</Text>
+        </ScrollView>
+      </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {shareFeedback ? (
-        <View style={styles.shareFeedbackWrap}>
-          <Text style={styles.shareFeedback}>{shareFeedback}</Text>
-        </View>
-      ) : null}
-      <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
-      <Text variant="headlineSmall" style={styles.title}>
-        {displayTitle}
-      </Text>
-      <Text
-        variant="bodyLarge"
-        style={styles.artist}
-        onPress={() => primaryAlbum && navigation.navigate('ArtistDetail', { artistIds: [primaryAlbum.artist_id], artistName: primaryAlbum.artist_name || 'Unknown' })}
+    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+      <ScrollView
+        style={styles.scroll}
+        onScroll={(e) => {
+          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
-        {artistNames}
-      </Text>
-      {primaryAlbum.year && (
-        <Text variant="bodySmall" style={styles.year}>
-          {primaryAlbum.year}
+        {shareFeedback ? (
+          <View style={styles.shareFeedbackWrap}>
+            <Text style={styles.shareFeedback}>{shareFeedback}</Text>
+          </View>
+        ) : null}
+        <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
+        <Text variant="headlineSmall" style={styles.title}>
+          {displayTitle}
         </Text>
-      )}
-      {(!isGrouped || showAsSingleRelease) && (
-        <View style={styles.albumActions}>
-          {mergedTracks.length > 0 && (
-            <>
-              <Button
-                mode="contained"
-                icon="play"
-                onPress={() => handlePlayTrack(mergedTracks[0], mergedTracks)}
-                style={styles.playAlbumButton}
-              >
-                Play album
-              </Button>
-              <View style={styles.albumActionRow}>
-                <Button mode="outlined" compact onPress={() => addToQueue(mergedTracks)} style={styles.albumActionBtn}>
-                  Add to queue
-                </Button>
-                <Button mode="outlined" compact onPress={() => playNext(mergedTracks)} style={styles.albumActionBtn}>
-                  Play next
-                </Button>
-              </View>
-            </>
-          )}
-          <View style={styles.albumActionRow}>
-            <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
-              Share
-            </Button>
-          </View>
-        </View>
-      )}
-      {isGrouped && !showAsSingleRelease && effectiveAlbumIds.length > 1 ? (
-        <>
-          <View style={styles.albumActions}>
-            <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
-              Share
-            </Button>
-          </View>
-          <Text variant="titleSmall" style={styles.section}>
-            Editions
+        <Text
+          variant="bodyLarge"
+          style={styles.artist}
+          onPress={() => primaryAlbum && navigation.navigate('ArtistDetail', { artistIds: [primaryAlbum.artist_id], artistName: primaryAlbum.artist_name || 'Unknown' })}
+        >
+          {artistNames}
+        </Text>
+        {primaryAlbum.year && (
+          <Text variant="bodySmall" style={styles.year}>
+            {primaryAlbum.year}
           </Text>
-          {allTracksByAlbum.map((discTracks, idx) => {
-            const versionAlbum = albums[idx];
-            const versionTitle = versionAlbum?.title ?? `Version ${idx + 1}`;
-            return (
-              <View key={effectiveAlbumIds[idx]} style={styles.discSection}>
-                <View style={styles.discHeader}>
-                  <Text variant="titleSmall" style={styles.section} numberOfLines={2}>
-                    {versionTitle}
-                  </Text>
-                  {discTracks.length > 0 && (
-                    <View style={styles.discActions}>
-                      <Button
-                        mode="contained"
-                        compact
-                        icon="play"
-                        onPress={() => handlePlayTrack(discTracks[0], discTracks)}
-                        style={styles.discPlayBtn}
-                      >
-                        Play album
-                      </Button>
-                      <View style={styles.discActionRow}>
-                        <Button mode="outlined" compact onPress={() => addToQueue(discTracks)} style={styles.albumActionBtn}>
-                          Add to queue
+        )}
+        {(!isGrouped || showAsSingleRelease) && (
+          <View style={styles.albumActions}>
+            {mergedTracks.length > 0 && (
+              <>
+                <Button
+                  mode="contained"
+                  icon="play"
+                  onPress={() => handlePlayTrack(mergedTracks[0], mergedTracks)}
+                  style={styles.playAlbumButton}
+                >
+                  Play album
+                </Button>
+                <View style={styles.albumActionRow}>
+                  <Button mode="outlined" compact onPress={() => addToQueue(mergedTracks)} style={styles.albumActionBtn}>
+                    Add to queue
+                  </Button>
+                  <Button mode="outlined" compact onPress={() => playNext(mergedTracks)} style={styles.albumActionBtn}>
+                    Play next
+                  </Button>
+                </View>
+              </>
+            )}
+            <View style={styles.albumActionRow}>
+              <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
+                Share
+              </Button>
+            </View>
+          </View>
+        )}
+        {isGrouped && !showAsSingleRelease && effectiveAlbumIds.length > 1 ? (
+          <>
+            <View style={styles.albumActions}>
+              <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
+                Share
+              </Button>
+            </View>
+            <Text variant="titleSmall" style={styles.section}>
+              Editions
+            </Text>
+            {allTracksByAlbum.map((discTracks, idx) => {
+              const versionAlbum = albums[idx];
+              const versionTitle = versionAlbum?.title ?? `Version ${idx + 1}`;
+              return (
+                <View key={effectiveAlbumIds[idx]} style={styles.discSection}>
+                  <View style={styles.discHeader}>
+                    <Text variant="titleSmall" style={styles.section} numberOfLines={2}>
+                      {versionTitle}
+                    </Text>
+                    {discTracks.length > 0 && (
+                      <View style={styles.discActions}>
+                        <Button
+                          mode="contained"
+                          compact
+                          icon="play"
+                          onPress={() => handlePlayTrack(discTracks[0], discTracks)}
+                          style={styles.discPlayBtn}
+                        >
+                          Play album
                         </Button>
-                        <Button mode="outlined" compact onPress={() => playNext(discTracks)} style={styles.albumActionBtn}>
-                          Play next
-                        </Button>
+                        <View style={styles.discActionRow}>
+                          <Button mode="outlined" compact onPress={() => addToQueue(discTracks)} style={styles.albumActionBtn}>
+                            Add to queue
+                          </Button>
+                          <Button mode="outlined" compact onPress={() => playNext(discTracks)} style={styles.albumActionBtn}>
+                            Play next
+                          </Button>
+                        </View>
                       </View>
-                    </View>
+                    )}
+                  </View>
+                  {tracksLoading && discTracks.length === 0 ? (
+                    <Text style={styles.muted}>Loading...</Text>
+                  ) : (
+                    discTracks.map((t) => {
+                      const isHighlighted = highlightTrackId === t.id;
+                      return (
+                        <TrackRow
+                          key={t.id}
+                          track={t}
+                          albumId={t.album_id}
+                          isHighlighted={isHighlighted}
+                          onPlay={() => handlePlayTrack(t, discTracks)}
+                          onPress={() => handleTrackPress(t)}
+                          addToQueue={addToQueue}
+                          playNext={playNext}
+                          onShare={handleShareTrack}
+                        />
+                      );
+                    })
                   )}
                 </View>
-                {tracksLoading && discTracks.length === 0 ? (
-                  <Text style={styles.muted}>Loading...</Text>
-                ) : (
-                  discTracks.map((t) => {
-                    const isHighlighted = highlightTrackId === t.id;
-                    return (
-                      <TrackRow
-                        key={t.id}
-                        track={t}
-                        albumId={t.album_id}
-                        isHighlighted={isHighlighted}
-                        onPlay={() => handlePlayTrack(t, discTracks)}
-                        onPress={() => handleTrackPress(t)}
-                        addToQueue={addToQueue}
-                        playNext={playNext}
-                        onShare={handleShareTrack}
-                      />
-                    );
-                  })
-                )}
-              </View>
-            );
-          })}
-        </>
-      ) : (
-        <>
-          <Text variant="titleSmall" style={styles.section}>
-            Tracks
-          </Text>
-          {tracksLoading ? (
-            <Text style={styles.muted}>Loading tracks...</Text>
-          ) : (
-            mergedTracks.map((t) => {
-              const isHighlighted = highlightTrackId === t.id;
-              return (
-                <TrackRow
-                  key={t.id}
-                  track={t}
-                  albumId={t.album_id}
-                  isHighlighted={isHighlighted}
-                  onPlay={() => handlePlayTrack(t, mergedTracks)}
-                  onPress={() => handleTrackPress(t)}
-                  addToQueue={addToQueue}
-                  playNext={playNext}
-                  onShare={handleShareTrack}
-                />
               );
-            })
-          )}
-        </>
-      )}
-    </ScrollView>
+            })}
+          </>
+        ) : (
+          <>
+            <Text variant="titleSmall" style={styles.section}>
+              Tracks
+            </Text>
+            {tracksLoading ? (
+              <Text style={styles.muted}>Loading tracks...</Text>
+            ) : (
+              mergedTracks.map((t) => {
+                const isHighlighted = highlightTrackId === t.id;
+                return (
+                  <TrackRow
+                    key={t.id}
+                    track={t}
+                    albumId={t.album_id}
+                    isHighlighted={isHighlighted}
+                    onPlay={() => handlePlayTrack(t, mergedTracks)}
+                    onPress={() => handleTrackPress(t)}
+                    addToQueue={addToQueue}
+                    playNext={playNext}
+                    onShare={handleShareTrack}
+                  />
+                );
+              })
+            )}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -422,6 +459,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  scroll: {
+    flex: 1,
   },
   artwork: {
     alignSelf: 'center',
