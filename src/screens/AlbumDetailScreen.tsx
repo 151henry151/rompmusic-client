@@ -14,6 +14,7 @@ import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
+import { buildPublicPath } from '../utils/publicWebsiteUrl';
 
 type AlbumDetailParams = { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
 type RootStackParamList = {
@@ -190,7 +191,7 @@ export default function AlbumDetailScreen() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       return `${window.location.origin}/album/${id}`;
     }
-    return `${typeof window !== 'undefined' ? window.location?.origin : 'https://rompmusic.com'}/album/${id}`;
+    return buildPublicPath(`/album/${id}`);
   };
 
   const copyToClipboardAndNotify = useCallback((url: string, message: string) => {
@@ -233,7 +234,7 @@ export default function AlbumDetailScreen() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       return `${window.location.origin}/track/${trackId}`;
     }
-    return `${typeof window !== 'undefined' ? window.location?.origin : 'https://rompmusic.com'}/track/${trackId}`;
+    return buildPublicPath(`/track/${trackId}`);
   }, []);
 
   const handleShareTrack = useCallback((track: Track & { album_title?: string; artist_name?: string }) => {

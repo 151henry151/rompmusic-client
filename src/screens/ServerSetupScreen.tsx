@@ -2,18 +2,18 @@
  * Copyright (C) 2024 RompMusic Contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * First-run server configuration. Shown when no server URL is stored and
- * EXPO_PUBLIC_API_URL is not set (e.g. native apps or a self-hosted web client).
+ * First-run server configuration. Shown when native app has no saved server URL,
+ * or when web has neither a saved URL nor EXPO_PUBLIC_API_URL preconfiguration.
  */
 
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, TextInput, Button } from 'react-native-paper';
-import { useServerStore, normalizeServerUrl } from '../store/serverStore';
+import { useServerStore, normalizeServerUrl, isInsecureRemoteHttpUrl } from '../store/serverStore';
 
 export default function ServerSetupScreen() {
   const setServerUrl = useServerStore((s) => s.setServerUrl);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState('https://rompmusic.com');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -21,6 +21,10 @@ export default function ServerSetupScreen() {
     const normalized = normalizeServerUrl(input);
     if (!normalized) {
       setError('Please enter your server URL (e.g. https://music.example.com)');
+      return;
+    }
+    if (Platform.OS === 'ios' && isInsecureRemoteHttpUrl(normalized)) {
+      setError('iOS requires https:// for remote servers. Use https://your-server.example.com');
       return;
     }
     try {
@@ -44,12 +48,12 @@ export default function ServerSetupScreen() {
           Connect to your server
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          Enter the URL of your RompMusic server. You can use the same server address you use in a browser (e.g. https://music.example.com). The app will use the API at /api/v1.
+          Enter your server URL or IP address.
         </Text>
         <TextInput
           mode="outlined"
           label="Server URL"
-          placeholder="https://music.example.com"
+          placeholder="https://rompmusic.com"
           value={input}
           onChangeText={(t) => { setInput(t); setError(null); }}
           onSubmitEditing={handleSubmit}
