@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Album detail action layout (Android)** — Share button no longer expands incorrectly and pushes track content off-screen on certain albums; action rows now use explicit sizing for single-share vs two-button rows.
 - **Swipe-down dismiss on detail screens (Android)** — Improved gesture responder capture on `AlbumDetail` and `TrackDetail` so swipe-down-to-go-back is detected more reliably when starting from scroll position top.
 - **Expo SDK dependency validation** — Pinned `expo-build-properties` back to `~1.0.10` for Expo SDK 54 compatibility so `expo doctor` passes during EAS builds.
+- **Deep library album art on Android** — Reduced native eager prefetch pressure in Library and hardened album-art loading retries/resizing so album covers continue loading while scrolling deep into large album lists instead of falling back to placeholders after transient load failures.
 
 ## [0.1.0-beta.13] - 2026-02-28
 

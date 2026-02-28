@@ -410,10 +410,14 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     if (searchQuery) return;
+    // Native: avoid eager full-library prefetch (can trigger too many concurrent artwork loads).
+    if (Platform.OS !== 'web') return;
     if (hasMoreArtists && !artistsLoadingMore && !artistsLoading) fetchMoreArtists();
   }, [searchQuery, hasMoreArtists, artistsLoadingMore, artistsLoading, fetchMoreArtists]);
   useEffect(() => {
     if (searchQuery) return;
+    // Native: load additional pages from scroll/section-jump only.
+    if (Platform.OS !== 'web') return;
     if (hasMoreAlbums && !albumsLoadingMore && !albumsLoading) fetchMoreAlbums();
   }, [searchQuery, hasMoreAlbums, albumsLoadingMore, albumsLoading, fetchMoreAlbums]);
 
