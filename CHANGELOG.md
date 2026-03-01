@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Album grid pinch zoom** — Library album list now supports pinch-to-zoom with a dynamic 1–12 albums-per-row range (default remains 4 on mobile / 5 on larger widths).
+- **Album grid pinch zoom** — Library album list now supports pinch-to-zoom with a dynamic 1–12 albums-per-row range (default remains 3 on mobile / 5 on larger widths).
 - **Zoomable album artwork modal** — Tapping album art on `AlbumDetail` and full-screen `Player` opens a zoom modal with pinch zoom and quick reset.
 
 ### Fixed
 
+- **Swipe-down dismiss gesture reliability (Android detail/player)** — `AlbumDetail`, `TrackDetail`, and full-screen `Player` now capture vertical drag intent earlier and trigger dismiss based on tracked max drag distance, so a center-screen ~1 inch downward swipe reliably closes/goes back.
 - **Album grid pinch zoom UX (Android/Web)** — Reworked pinch handling to use smooth live gesture scaling with commit-on-release layout updates, eliminating jerky delayed jumps while zooming.
 - **Album grid default density + section index spacing** — Restored the default library album density to the previous 3-per-row mobile feel and reserved right-side space so the A–Z section index no longer overlays album covers.
 - **Album detail action layout (Android)** — Share button no longer expands incorrectly and pushes track content off-screen on certain albums; action rows now use explicit sizing for single-share vs two-button rows.

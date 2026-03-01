@@ -19,6 +19,11 @@ interface Props {
   onClose: () => void;
 }
 
+const SWIPE_DISMISS_MIN_DRAG = 72;
+const SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY = 44;
+const SWIPE_DISMISS_MAX_START_SCROLL_Y = 18;
+const SWIPE_DISMISS_DIRECTION_BIAS = 0.6;
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
@@ -55,17 +60,35 @@ export default function PlayerScreen({ onClose }: Props) {
 
   const scrollOffsetYRef = React.useRef(0);
   const dismissTriggeredRef = React.useRef(false);
+  const maxSwipeDownDistanceRef = React.useRef(0);
+  const shouldCaptureSwipeDown = React.useCallback((gesture: { dy: number; dx: number }) => {
+    if (gesture.dy <= 10) return false;
+    if (Math.abs(gesture.dy) < Math.abs(gesture.dx) * SWIPE_DISMISS_DIRECTION_BIAS) return false;
+    if (scrollOffsetYRef.current <= SWIPE_DISMISS_MAX_START_SCROLL_Y) return true;
+    return gesture.dy >= SWIPE_DISMISS_MIN_DRAG;
+  }, []);
   const swipeDownResponder = React.useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
-          scrollOffsetYRef.current <= 4 &&
-          gesture.dy > 8 &&
-          Math.abs(gesture.dy) >= Math.abs(gesture.dx) * 0.9,
+        onMoveShouldSetPanResponder: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
+        onMoveShouldSetPanResponderCapture: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
+        onPanResponderGrant: () => {
+          maxSwipeDownDistanceRef.current = 0;
+        },
+        onPanResponderMove: (_evt, gesture) => {
+          if (gesture.dy > maxSwipeDownDistanceRef.current) {
+            maxSwipeDownDistanceRef.current = gesture.dy;
+          }
+        },
         onPanResponderTerminationRequest: () => false,
         onPanResponderRelease: (_evt, gesture) => {
           if (dismissTriggeredRef.current) return;
-          if (gesture.dy > 56 || (gesture.dy > 32 && gesture.vy > 0.12)) {
+          const swipeDistance = Math.max(gesture.dy, maxSwipeDownDistanceRef.current);
+          maxSwipeDownDistanceRef.current = 0;
+          if (
+            swipeDistance > SWIPE_DISMISS_MIN_DRAG ||
+            (swipeDistance > SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY && gesture.vy > 0.08)
+          ) {
             dismissTriggeredRef.current = true;
             onClose();
             setTimeout(() => {
@@ -73,8 +96,11 @@ export default function PlayerScreen({ onClose }: Props) {
             }, 300);
           }
         },
+        onPanResponderTerminate: () => {
+          maxSwipeDownDistanceRef.current = 0;
+        },
       }),
-    [onClose]
+    [onClose, shouldCaptureSwipeDown]
   );
 
   if (!currentTrack) return null;
