@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useRef, useCallback } from 'react';
+import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, IconButton, List, Switch } from 'react-native-paper';
@@ -11,7 +11,6 @@ import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
 import DismissRefreshControl from '../components/DismissRefreshControl';
-import SwipeDownDismissWrapper, { type SwipeDownDismissWrapperRef } from '../components/SwipeDownDismissWrapper';
 
 interface Props {
   onClose: () => void;
@@ -52,18 +51,13 @@ export default function PlayerScreen({ onClose }: Props) {
   if (!currentTrack) return null;
 
   const progress = duration > 0 ? position / duration : 0;
-  const dismissWrapperRef = useRef<SwipeDownDismissWrapperRef>(null);
-  const triggerDismissAnimated = useCallback(() => {
-    dismissWrapperRef.current?.dismissWithAnimation();
-  }, []);
 
   return (
-    <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={onClose}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<DismissRefreshControl onRefresh={triggerDismissAnimated} />}
-      >
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<DismissRefreshControl onRefresh={onClose} />}
+    >
         <IconButton
           icon="arrow-left"
           onPress={onClose}
@@ -156,8 +150,7 @@ export default function PlayerScreen({ onClose }: Props) {
           ))}
         </View>
       )}
-      </ScrollView>
-    </SwipeDownDismissWrapper>
+    </ScrollView>
   );
 }
 

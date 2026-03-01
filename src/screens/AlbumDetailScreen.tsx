@@ -14,7 +14,6 @@ import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
 import DismissRefreshControl from '../components/DismissRefreshControl';
-import SwipeDownDismissWrapper, { type SwipeDownDismissWrapperRef } from '../components/SwipeDownDismissWrapper';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
 import { getPrimaryArtistName } from '../utils/artistMerge';
@@ -166,11 +165,6 @@ export default function AlbumDetailScreen() {
       dismissTriggeredRef.current = false;
     }, 300);
   }, [navigation]);
-  const dismissWrapperRef = useRef<SwipeDownDismissWrapperRef>(null);
-  const triggerSwipeDismissAnimated = useCallback(() => {
-    dismissWrapperRef.current?.dismissWithAnimation();
-  }, []);
-
   const albumQueries = useQueries({
     queries: effectiveAlbumIds.map((id) => ({
       queryKey: ['album', id],
@@ -353,41 +347,36 @@ export default function AlbumDetailScreen() {
 
   if (effectiveAlbumIds.length === 0) {
     return (
-      <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
-        <View style={styles.container}>
-          <ScrollView
-            style={styles.scroll}
-            refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
-          >
-            <Text style={styles.muted}>No album selected.</Text>
-          </ScrollView>
-        </View>
-      </SwipeDownDismissWrapper>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+        >
+          <Text style={styles.muted}>No album selected.</Text>
+        </ScrollView>
+      </View>
     );
   }
 
   if (isLoading || !primaryAlbum) {
     return (
-      <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
-        <View style={styles.container}>
-          <ScrollView
-            style={styles.scroll}
-            refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
-          >
-            <Text style={styles.muted}>Loading...</Text>
-          </ScrollView>
-        </View>
-      </SwipeDownDismissWrapper>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+        >
+          <Text style={styles.muted}>Loading...</Text>
+        </ScrollView>
+      </View>
     );
   }
 
   return (
-    <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
-      <View style={styles.container}>
-        <ScrollView
-          style={styles.scroll}
-          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
-        >
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scroll}
+        refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+      >
         {shareFeedback ? (
           <View style={styles.shareFeedbackWrap}>
             <Text style={styles.shareFeedback}>{shareFeedback}</Text>
@@ -537,15 +526,14 @@ export default function AlbumDetailScreen() {
             )}
           </>
         )}
-        </ScrollView>
-        <ZoomableArtworkModal
-          visible={artworkModalVisible}
-          albumId={primaryAlbumId}
-          title={displayTitle}
-          onClose={() => setArtworkModalVisible(false)}
-        />
-      </View>
-    </SwipeDownDismissWrapper>
+      </ScrollView>
+      <ZoomableArtworkModal
+        visible={artworkModalVisible}
+        albumId={primaryAlbumId}
+        title={displayTitle}
+        onClose={() => setArtworkModalVisible(false)}
+      />
+    </View>
   );
 }
 

@@ -257,7 +257,10 @@ export default function LibraryScreen() {
       setAlbumsPerRow(defaultAlbumsPerRow);
     }
   }, [tab, sortBy.albums, defaultAlbumsPerRow]);
-  const cardsPerRow = clampAlbumsPerRow(albumsPerRow);
+  const cardsPerRow =
+    tab === 'albums' && sortBy.albums === 'random'
+      ? Math.max(clampAlbumsPerRow(albumsPerRow), defaultAlbumsPerRow)
+      : clampAlbumsPerRow(albumsPerRow);
   const cardsPerRowForSkeleton = Math.max(1, Math.round(cardsPerRow));
   const availableGridWidth = width - HORIZONTAL_PADDING * 2 - (albumsShowSectionIndex ? SECTION_INDEX_RESERVED_SPACE : 0);
   const cardWidth = Math.max(20, (availableGridWidth - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
