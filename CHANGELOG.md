@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Swipe-down dismiss on detail screens (Android)** — Improved gesture responder capture on `AlbumDetail` and `TrackDetail` so swipe-down-to-go-back is detected more reliably when starting from scroll position top.
 - **Expo SDK dependency validation** — Pinned `expo-build-properties` back to `~1.0.10` for Expo SDK 54 compatibility so `expo doctor` passes during EAS builds.
 - **Deep library album art on Android** — Reduced native eager prefetch pressure in Library and hardened album-art loading retries/resizing so album covers continue loading while scrolling deep into large album lists instead of falling back to placeholders after transient load failures.
+- **Grouped album details (multi-artist splits)** — Album detail now auto-discovers related album variants when opened from a single split variant and keeps full tracklists by deduping with title+duration (not disc/track slot only), fixing cases like Doo-Bop showing one track and wrong/no cover in detail view.
 
 ## [0.1.0-beta.13] - 2026-02-28
 

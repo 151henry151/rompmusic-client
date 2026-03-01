@@ -14,6 +14,7 @@ import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
+import { getPrimaryArtistName } from '../utils/artistMerge';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
 
 type AlbumDetailParams = { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
@@ -22,6 +23,8 @@ type RootStackParamList = {
   TrackDetail: { trackId: number };
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
 };
+
+const RELATED_ALBUM_SEARCH_LIMIT = 250;
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -82,11 +85,70 @@ export default function AlbumDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'AlbumDetail'>>();
   const { albumId, albumIds, highlightTrackId } = route.params;
-  // Normalize to unique numbers (URL may give string; avoid duplicate ids from any source)
-  const effectiveAlbumIds = useMemo(() => {
+  // Normalize to unique numbers (URL may give string; avoid duplicate ids from any source).
+  const routeAlbumIds = useMemo(() => {
     const raw = albumIds ?? (albumId != null ? [albumId] : []);
     return [...new Set(raw.map((id) => Number(id)).filter(Boolean))];
   }, [albumId, albumIds]);
+  const seedAlbumId = routeAlbumIds[0];
+  const seedAlbumQuery = useQuery({
+    queryKey: ['album-seed', seedAlbumId],
+    queryFn: () => api.getAlbum(seedAlbumId),
+    enabled: routeAlbumIds.length === 1 && seedAlbumId != null,
+    staleTime: 60 * 1000,
+  });
+  const relatedAlbumIdsQuery = useQuery({
+    queryKey: [
+      'album-related',
+      seedAlbumId,
+      seedAlbumQuery.data?.artwork_hash ?? null,
+      seedAlbumQuery.data?.title ?? null,
+      seedAlbumQuery.data?.year ?? null,
+    ],
+    enabled: routeAlbumIds.length === 1 && !!seedAlbumQuery.data,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const seed = seedAlbumQuery.data as
+        | {
+            id: number;
+            title: string;
+            year?: number | null;
+            artwork_hash?: string | null;
+            artist_name?: string;
+          }
+        | undefined;
+      if (!seed || !seed.id) return routeAlbumIds;
+      const title = (seed.title || '').trim();
+      if (!title) return [seed.id];
+      const candidates = await api.getAlbums({
+        search: title,
+        limit: RELATED_ALBUM_SEARCH_LIMIT,
+        artwork_first: false,
+      });
+      if (!Array.isArray(candidates)) return [seed.id];
+      const seedPrimaryArtist = getPrimaryArtistName(seed.artist_name || 'Unknown').toLowerCase().trim();
+      const seedReleaseKey = getBaseReleaseKey(seed.title, seed.year ?? null);
+      const matchedIds = candidates
+        .filter((candidate: { id: number; title?: string; year?: number | null; artwork_hash?: string | null; artist_name?: string }) => {
+          if (!candidate || typeof candidate.id !== 'number') return false;
+          if (candidate.id === seed.id) return true;
+          if (seed.artwork_hash && candidate.artwork_hash && candidate.artwork_hash === seed.artwork_hash) return true;
+          if (seed.artwork_hash) return false;
+          const candidateReleaseKey = getBaseReleaseKey(candidate.title || '', candidate.year ?? null);
+          if (candidateReleaseKey !== seedReleaseKey) return false;
+          const candidatePrimaryArtist = getPrimaryArtistName(candidate.artist_name || 'Unknown').toLowerCase().trim();
+          return candidatePrimaryArtist === seedPrimaryArtist;
+        })
+        .map((candidate: { id: number }) => candidate.id);
+      const ids = [...new Set([seed.id, ...matchedIds].map((id) => Number(id)).filter(Boolean))];
+      return ids.length > 0 ? ids : [seed.id];
+    },
+  });
+  const effectiveAlbumIds = useMemo(() => {
+    if (routeAlbumIds.length !== 1) return routeAlbumIds;
+    const related = relatedAlbumIdsQuery.data ?? [];
+    return [...new Set([...routeAlbumIds, ...related].map((id) => Number(id)).filter(Boolean))];
+  }, [routeAlbumIds, relatedAlbumIdsQuery.data]);
   const isGrouped = effectiveAlbumIds.length > 1;
 
   const playTrack = usePlayerStore((s) => s.playTrack);
@@ -136,7 +198,9 @@ export default function AlbumDetailScreen() {
     const seenId = new Set<number>();
     const seenSlot = new Set<string>();
     return tracks.filter((t) => {
-      const key = `${t.album_id}|${t.disc_number}|${t.track_number}`;
+      const titleKey = (t.title || '').trim().toLowerCase();
+      const durationKey = Number.isFinite(t.duration) ? Math.round(t.duration) : 'na';
+      const key = `${t.album_id}|${t.disc_number}|${t.track_number}|${titleKey}|${durationKey}`;
       if (seenId.has(t.id) || seenSlot.has(key)) return false;
       seenId.add(t.id);
       seenSlot.add(key);
@@ -152,7 +216,16 @@ export default function AlbumDetailScreen() {
     [trackQueries]
   );
 
-  const primaryAlbum = albums[0];
+  const primaryAlbum = useMemo(() => {
+    if (albums.length === 0) return undefined;
+    const withArtwork = albums.find((a) => a.has_artwork === true);
+    if (withArtwork) return withArtwork;
+    return albums.reduce((best, current) => {
+      const bestCount = best.track_count ?? 0;
+      const currentCount = current.track_count ?? 0;
+      return currentCount > bestCount ? current : best;
+    }, albums[0]);
+  }, [albums]);
   /** When we have multiple album IDs but they're the same release (same base title + year), show as one album to avoid fake "editions". */
   const showAsSingleRelease = useMemo(() => {
     if (!isGrouped || albums.length <= 1) return false;
@@ -164,14 +237,16 @@ export default function AlbumDetailScreen() {
   const mergedTracks = useMemo(() => {
     const out: (Track & { album_title?: string; artist_name?: string })[] = [];
     if (showAsSingleRelease) {
-      const bySlot = new Map<string, Track & { album_title?: string; artist_name?: string }>();
+      const bySlotAndTitle = new Map<string, Track & { album_title?: string; artist_name?: string }>();
       for (const arr of allTracksByAlbum) {
         for (const t of arr) {
-          const slot = `${t.disc_number}|${t.track_number}`;
-          if (!bySlot.has(slot)) bySlot.set(slot, t);
+          const titleKey = (t.title || '').trim().toLowerCase();
+          const durationKey = Number.isFinite(t.duration) ? Math.round(t.duration) : 'na';
+          const slot = `${t.disc_number}|${t.track_number}|${titleKey}|${durationKey}`;
+          if (!bySlotAndTitle.has(slot)) bySlotAndTitle.set(slot, t);
         }
       }
-      out.push(...bySlot.values());
+      out.push(...bySlotAndTitle.values());
     } else {
       allTracksByAlbum.forEach((arr) => out.push(...arr));
     }
@@ -182,7 +257,10 @@ export default function AlbumDetailScreen() {
     ? (isGrouped ? [...new Set(albums.map((a) => a.artist_name || 'Unknown'))].join(', ') : (primaryAlbum.artist_name || 'Unknown'))
     : '';
   const primaryAlbumId = primaryAlbum?.id ?? effectiveAlbumIds[0];
-  const isLoading = albumQueries.some((q) => q.isLoading) || (effectiveAlbumIds.length > 0 && albums.length === 0);
+  const isLoading =
+    albumQueries.some((q) => q.isLoading) ||
+    seedAlbumQuery.isLoading ||
+    (effectiveAlbumIds.length > 0 && albums.length === 0);
   const tracksLoading = trackQueries.some((q) => q.isLoading);
 
   const playAlbumInProgress = React.useRef(false);
