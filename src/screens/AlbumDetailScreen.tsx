@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share, Pressable, NativeSyntheticEvent, NativeTouchEvent } from 'react-native';
+import { ScrollView, StyleSheet, View, Platform, Share, Pressable, RefreshControl } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -26,8 +26,6 @@ type RootStackParamList = {
 };
 
 const RELATED_ALBUM_SEARCH_LIMIT = 250;
-const SWIPE_DISMISS_MIN_DRAG = 72;
-const SWIPE_DISMISS_DIRECTION_BIAS = 0.6;
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -158,7 +156,6 @@ export default function AlbumDetailScreen() {
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
   const dismissTriggeredRef = React.useRef(false);
-  const swipeTouchStateRef = React.useRef({ active: false, startX: 0, startY: 0, maxDy: 0 });
   const triggerSwipeDismiss = useCallback(() => {
     if (dismissTriggeredRef.current) return;
     dismissTriggeredRef.current = true;
@@ -167,37 +164,6 @@ export default function AlbumDetailScreen() {
       dismissTriggeredRef.current = false;
     }, 300);
   }, [navigation]);
-  const getPrimaryTouch = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
-    if (!Array.isArray(touches) || touches.length === 0) return null;
-    return touches[0];
-  }, []);
-  const handleSwipeTouchStart = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    const touch = getPrimaryTouch(event);
-    if (!touch) return;
-    swipeTouchStateRef.current = {
-      active: true,
-      startX: touch.pageX,
-      startY: touch.pageY,
-      maxDy: 0,
-    };
-  }, [getPrimaryTouch]);
-  const handleSwipeTouchMove = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    const state = swipeTouchStateRef.current;
-    if (!state.active) return;
-    const touch = getPrimaryTouch(event);
-    if (!touch) return;
-    const dx = touch.pageX - state.startX;
-    const dy = touch.pageY - state.startY;
-    if (dy > state.maxDy) state.maxDy = dy;
-    if (state.maxDy < SWIPE_DISMISS_MIN_DRAG) return;
-    if (Math.abs(state.maxDy) < Math.abs(dx) * SWIPE_DISMISS_DIRECTION_BIAS) return;
-    state.active = false;
-    triggerSwipeDismiss();
-  }, [getPrimaryTouch, triggerSwipeDismiss]);
-  const handleSwipeTouchEnd = useCallback(() => {
-    swipeTouchStateRef.current.active = false;
-  }, []);
 
   const albumQueries = useQueries({
     queries: effectiveAlbumIds.map((id) => ({
@@ -384,10 +350,7 @@ export default function AlbumDetailScreen() {
       <View style={styles.container}>
         <ScrollView
           style={styles.scroll}
-          onTouchStart={handleSwipeTouchStart}
-          onTouchMove={handleSwipeTouchMove}
-          onTouchEnd={handleSwipeTouchEnd}
-          onTouchCancel={handleSwipeTouchEnd}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
         >
           <Text style={styles.muted}>No album selected.</Text>
         </ScrollView>
@@ -400,10 +363,7 @@ export default function AlbumDetailScreen() {
       <View style={styles.container}>
         <ScrollView
           style={styles.scroll}
-          onTouchStart={handleSwipeTouchStart}
-          onTouchMove={handleSwipeTouchMove}
-          onTouchEnd={handleSwipeTouchEnd}
-          onTouchCancel={handleSwipeTouchEnd}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
         >
           <Text style={styles.muted}>Loading...</Text>
         </ScrollView>
@@ -415,10 +375,7 @@ export default function AlbumDetailScreen() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        onTouchStart={handleSwipeTouchStart}
-        onTouchMove={handleSwipeTouchMove}
-        onTouchEnd={handleSwipeTouchEnd}
-        onTouchCancel={handleSwipeTouchEnd}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
       >
         {shareFeedback ? (
           <View style={styles.shareFeedbackWrap}>
