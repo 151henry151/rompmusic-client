@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Album grid pinch zoom** — Library album list now supports pinch-to-zoom with a dynamic 1–12 albums-per-row range (default remains 3 on mobile / 5 on larger widths).
+- **Zoomable album artwork modal** — Tapping album art on `AlbumDetail` and full-screen `Player` opens a zoom modal with pinch zoom and quick reset.
+
+### Fixed
+
+- **Swipe-down dismiss reliability hardening (Android detail/player)** — Replaced `PanResponder`-based dismiss capture with direct touch-tracking for downward drag distance on `AlbumDetail`, `TrackDetail`, and full-screen `Player`, improving reliability for center-screen swipe-down-to-close gestures.
+- **Swipe-down dismiss gesture reliability (Android detail/player)** — `AlbumDetail`, `TrackDetail`, and full-screen `Player` now capture vertical drag intent earlier and trigger dismiss based on tracked max drag distance, so a center-screen ~1 inch downward swipe reliably closes/goes back.
+- **Album grid pinch zoom UX (Android/Web)** — Reworked pinch handling to use smooth live gesture scaling with commit-on-release layout updates, eliminating jerky delayed jumps while zooming.
+- **Album grid default density + section index spacing** — Restored the default library album density to the previous 3-per-row mobile feel and reserved right-side space so the A–Z section index no longer overlays album covers.
+- **Album detail action layout (Android)** — Share button no longer expands incorrectly and pushes track content off-screen on certain albums; action rows now use explicit sizing for single-share vs two-button rows.
+- **Swipe-down dismiss on detail screens (Android)** — Improved gesture responder capture on `AlbumDetail` and `TrackDetail` so swipe-down-to-go-back is detected more reliably when starting from scroll position top.
+- **Android launcher icon crop** — Added padded Android icon/adaptive foreground assets and wired them in `app.json` to preserve transparent edge padding on devices that mask/crop launcher icons more aggressively.
+- **Expo SDK dependency validation** — Pinned `expo-build-properties` back to `~1.0.10` for Expo SDK 54 compatibility so `expo doctor` passes during EAS builds.
+- **Deep library album art on Android** — Reduced native eager prefetch pressure in Library and hardened album-art loading retries/resizing so album covers continue loading while scrolling deep into large album lists instead of falling back to placeholders after transient load failures.
+- **Grouped album details (multi-artist splits)** — Album detail now auto-discovers related album variants when opened from a single split variant and keeps full tracklists by deduping with title+duration (not disc/track slot only), fixing cases like Doo-Bop showing one track and wrong/no cover in detail view.
+- **Swipe-down dismiss reliability (Android)** — `AlbumDetail`, `TrackDetail`, and the full-screen `Player` now use more tolerant swipe-down gesture thresholds and capture handlers directly on scroll containers so drag-to-dismiss consistently returns to the previous view.
+- **Android lock-screen/notification controls** — Fixed Now Playing session races when skipping tracks so metadata and controls keep updating after next/previous actions; notification controls now show previous/next track icons instead of seek arrows.
+
 ## [0.1.0-beta.13] - 2026-02-28
 
 ### Added

@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share, PanResponder } from 'react-native';
+import { ScrollView, StyleSheet, View, Platform, Share, Pressable, NativeSyntheticEvent, NativeTouchEvent } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -12,8 +12,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
+import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
+import { getPrimaryArtistName } from '../utils/artistMerge';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
 
 type AlbumDetailParams = { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
@@ -22,6 +24,10 @@ type RootStackParamList = {
   TrackDetail: { trackId: number };
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
 };
+
+const RELATED_ALBUM_SEARCH_LIMIT = 250;
+const SWIPE_DISMISS_MIN_DRAG = 72;
+const SWIPE_DISMISS_DIRECTION_BIAS = 0.6;
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -82,39 +88,116 @@ export default function AlbumDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'AlbumDetail'>>();
   const { albumId, albumIds, highlightTrackId } = route.params;
-  // Normalize to unique numbers (URL may give string; avoid duplicate ids from any source)
-  const effectiveAlbumIds = useMemo(() => {
+  // Normalize to unique numbers (URL may give string; avoid duplicate ids from any source).
+  const routeAlbumIds = useMemo(() => {
     const raw = albumIds ?? (albumId != null ? [albumId] : []);
     return [...new Set(raw.map((id) => Number(id)).filter(Boolean))];
   }, [albumId, albumIds]);
+  const seedAlbumId = routeAlbumIds[0];
+  const seedAlbumQuery = useQuery({
+    queryKey: ['album-seed', seedAlbumId],
+    queryFn: () => api.getAlbum(seedAlbumId),
+    enabled: routeAlbumIds.length === 1 && seedAlbumId != null,
+    staleTime: 60 * 1000,
+  });
+  const relatedAlbumIdsQuery = useQuery({
+    queryKey: [
+      'album-related',
+      seedAlbumId,
+      seedAlbumQuery.data?.artwork_hash ?? null,
+      seedAlbumQuery.data?.title ?? null,
+      seedAlbumQuery.data?.year ?? null,
+    ],
+    enabled: routeAlbumIds.length === 1 && !!seedAlbumQuery.data,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const seed = seedAlbumQuery.data as
+        | {
+            id: number;
+            title: string;
+            year?: number | null;
+            artwork_hash?: string | null;
+            artist_name?: string;
+          }
+        | undefined;
+      if (!seed || !seed.id) return routeAlbumIds;
+      const title = (seed.title || '').trim();
+      if (!title) return [seed.id];
+      const candidates = await api.getAlbums({
+        search: title,
+        limit: RELATED_ALBUM_SEARCH_LIMIT,
+        artwork_first: false,
+      });
+      if (!Array.isArray(candidates)) return [seed.id];
+      const seedPrimaryArtist = getPrimaryArtistName(seed.artist_name || 'Unknown').toLowerCase().trim();
+      const seedReleaseKey = getBaseReleaseKey(seed.title, seed.year ?? null);
+      const matchedIds = candidates
+        .filter((candidate: { id: number; title?: string; year?: number | null; artwork_hash?: string | null; artist_name?: string }) => {
+          if (!candidate || typeof candidate.id !== 'number') return false;
+          if (candidate.id === seed.id) return true;
+          if (seed.artwork_hash && candidate.artwork_hash && candidate.artwork_hash === seed.artwork_hash) return true;
+          if (seed.artwork_hash) return false;
+          const candidateReleaseKey = getBaseReleaseKey(candidate.title || '', candidate.year ?? null);
+          if (candidateReleaseKey !== seedReleaseKey) return false;
+          const candidatePrimaryArtist = getPrimaryArtistName(candidate.artist_name || 'Unknown').toLowerCase().trim();
+          return candidatePrimaryArtist === seedPrimaryArtist;
+        })
+        .map((candidate: { id: number }) => candidate.id);
+      const ids = [...new Set([seed.id, ...matchedIds].map((id) => Number(id)).filter(Boolean))];
+      return ids.length > 0 ? ids : [seed.id];
+    },
+  });
+  const effectiveAlbumIds = useMemo(() => {
+    if (routeAlbumIds.length !== 1) return routeAlbumIds;
+    const related = relatedAlbumIdsQuery.data ?? [];
+    return [...new Set([...routeAlbumIds, ...related].map((id) => Number(id)).filter(Boolean))];
+  }, [routeAlbumIds, relatedAlbumIdsQuery.data]);
   const isGrouped = effectiveAlbumIds.length > 1;
 
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
-  const scrollOffsetYRef = React.useRef(0);
   const dismissTriggeredRef = React.useRef(false);
-
-  const swipeDownResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, gesture) =>
-          scrollOffsetYRef.current <= 0 &&
-          gesture.dy > 16 &&
-          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2,
-        onPanResponderRelease: (_evt, gesture) => {
-          if (dismissTriggeredRef.current) return;
-          if (gesture.dy > 90 && gesture.vy > 0.25) {
-            dismissTriggeredRef.current = true;
-            navigation.goBack();
-            setTimeout(() => {
-              dismissTriggeredRef.current = false;
-            }, 300);
-          }
-        },
-      }),
-    [navigation]
-  );
+  const swipeTouchStateRef = React.useRef({ active: false, startX: 0, startY: 0, maxDy: 0 });
+  const triggerSwipeDismiss = useCallback(() => {
+    if (dismissTriggeredRef.current) return;
+    dismissTriggeredRef.current = true;
+    navigation.goBack();
+    setTimeout(() => {
+      dismissTriggeredRef.current = false;
+    }, 300);
+  }, [navigation]);
+  const getPrimaryTouch = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
+    if (!Array.isArray(touches) || touches.length === 0) return null;
+    return touches[0];
+  }, []);
+  const handleSwipeTouchStart = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    swipeTouchStateRef.current = {
+      active: true,
+      startX: touch.pageX,
+      startY: touch.pageY,
+      maxDy: 0,
+    };
+  }, [getPrimaryTouch]);
+  const handleSwipeTouchMove = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const state = swipeTouchStateRef.current;
+    if (!state.active) return;
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    const dx = touch.pageX - state.startX;
+    const dy = touch.pageY - state.startY;
+    if (dy > state.maxDy) state.maxDy = dy;
+    if (state.maxDy < SWIPE_DISMISS_MIN_DRAG) return;
+    if (Math.abs(state.maxDy) < Math.abs(dx) * SWIPE_DISMISS_DIRECTION_BIAS) return;
+    state.active = false;
+    triggerSwipeDismiss();
+  }, [getPrimaryTouch, triggerSwipeDismiss]);
+  const handleSwipeTouchEnd = useCallback(() => {
+    swipeTouchStateRef.current.active = false;
+  }, []);
 
   const albumQueries = useQueries({
     queries: effectiveAlbumIds.map((id) => ({
@@ -135,7 +218,9 @@ export default function AlbumDetailScreen() {
     const seenId = new Set<number>();
     const seenSlot = new Set<string>();
     return tracks.filter((t) => {
-      const key = `${t.album_id}|${t.disc_number}|${t.track_number}`;
+      const titleKey = (t.title || '').trim().toLowerCase();
+      const durationKey = Number.isFinite(t.duration) ? Math.round(t.duration) : 'na';
+      const key = `${t.album_id}|${t.disc_number}|${t.track_number}|${titleKey}|${durationKey}`;
       if (seenId.has(t.id) || seenSlot.has(key)) return false;
       seenId.add(t.id);
       seenSlot.add(key);
@@ -151,7 +236,16 @@ export default function AlbumDetailScreen() {
     [trackQueries]
   );
 
-  const primaryAlbum = albums[0];
+  const primaryAlbum = useMemo(() => {
+    if (albums.length === 0) return undefined;
+    const withArtwork = albums.find((a) => a.has_artwork === true);
+    if (withArtwork) return withArtwork;
+    return albums.reduce((best, current) => {
+      const bestCount = best.track_count ?? 0;
+      const currentCount = current.track_count ?? 0;
+      return currentCount > bestCount ? current : best;
+    }, albums[0]);
+  }, [albums]);
   /** When we have multiple album IDs but they're the same release (same base title + year), show as one album to avoid fake "editions". */
   const showAsSingleRelease = useMemo(() => {
     if (!isGrouped || albums.length <= 1) return false;
@@ -163,14 +257,16 @@ export default function AlbumDetailScreen() {
   const mergedTracks = useMemo(() => {
     const out: (Track & { album_title?: string; artist_name?: string })[] = [];
     if (showAsSingleRelease) {
-      const bySlot = new Map<string, Track & { album_title?: string; artist_name?: string }>();
+      const bySlotAndTitle = new Map<string, Track & { album_title?: string; artist_name?: string }>();
       for (const arr of allTracksByAlbum) {
         for (const t of arr) {
-          const slot = `${t.disc_number}|${t.track_number}`;
-          if (!bySlot.has(slot)) bySlot.set(slot, t);
+          const titleKey = (t.title || '').trim().toLowerCase();
+          const durationKey = Number.isFinite(t.duration) ? Math.round(t.duration) : 'na';
+          const slot = `${t.disc_number}|${t.track_number}|${titleKey}|${durationKey}`;
+          if (!bySlotAndTitle.has(slot)) bySlotAndTitle.set(slot, t);
         }
       }
-      out.push(...bySlot.values());
+      out.push(...bySlotAndTitle.values());
     } else {
       allTracksByAlbum.forEach((arr) => out.push(...arr));
     }
@@ -181,7 +277,10 @@ export default function AlbumDetailScreen() {
     ? (isGrouped ? [...new Set(albums.map((a) => a.artist_name || 'Unknown'))].join(', ') : (primaryAlbum.artist_name || 'Unknown'))
     : '';
   const primaryAlbumId = primaryAlbum?.id ?? effectiveAlbumIds[0];
-  const isLoading = albumQueries.some((q) => q.isLoading) || (effectiveAlbumIds.length > 0 && albums.length === 0);
+  const isLoading =
+    albumQueries.some((q) => q.isLoading) ||
+    seedAlbumQuery.isLoading ||
+    (effectiveAlbumIds.length > 0 && albums.length === 0);
   const tracksLoading = trackQueries.some((q) => q.isLoading);
 
   const playAlbumInProgress = React.useRef(false);
@@ -207,6 +306,7 @@ export default function AlbumDetailScreen() {
   };
 
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [artworkModalVisible, setArtworkModalVisible] = useState(false);
   const clearShareFeedback = useCallback(() => {
     setShareFeedback(null);
   }, []);
@@ -281,8 +381,14 @@ export default function AlbumDetailScreen() {
 
   if (effectiveAlbumIds.length === 0) {
     return (
-      <View style={styles.container} {...swipeDownResponder.panHandlers}>
-        <ScrollView style={styles.scroll}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          onTouchStart={handleSwipeTouchStart}
+          onTouchMove={handleSwipeTouchMove}
+          onTouchEnd={handleSwipeTouchEnd}
+          onTouchCancel={handleSwipeTouchEnd}
+        >
           <Text style={styles.muted}>No album selected.</Text>
         </ScrollView>
       </View>
@@ -291,8 +397,14 @@ export default function AlbumDetailScreen() {
 
   if (isLoading || !primaryAlbum) {
     return (
-      <View style={styles.container} {...swipeDownResponder.panHandlers}>
-        <ScrollView style={styles.scroll}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          onTouchStart={handleSwipeTouchStart}
+          onTouchMove={handleSwipeTouchMove}
+          onTouchEnd={handleSwipeTouchEnd}
+          onTouchCancel={handleSwipeTouchEnd}
+        >
           <Text style={styles.muted}>Loading...</Text>
         </ScrollView>
       </View>
@@ -300,20 +412,27 @@ export default function AlbumDetailScreen() {
   }
 
   return (
-    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+    <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        onScroll={(e) => {
-          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
+        onTouchStart={handleSwipeTouchStart}
+        onTouchMove={handleSwipeTouchMove}
+        onTouchEnd={handleSwipeTouchEnd}
+        onTouchCancel={handleSwipeTouchEnd}
       >
         {shareFeedback ? (
           <View style={styles.shareFeedbackWrap}>
             <Text style={styles.shareFeedback}>{shareFeedback}</Text>
           </View>
         ) : null}
-        <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
+        <Pressable
+          onPress={() => setArtworkModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open zoomed album artwork"
+          style={styles.artworkPressable}
+        >
+          <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
+        </Pressable>
         <Text variant="headlineSmall" style={styles.title}>
           {displayTitle}
         </Text>
@@ -352,7 +471,7 @@ export default function AlbumDetailScreen() {
               </>
             )}
             <View style={styles.albumActionRow}>
-              <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
+              <Button mode="outlined" compact onPress={handleShare} style={styles.shareActionBtn} icon="share-variant">
                 Share
               </Button>
             </View>
@@ -361,7 +480,7 @@ export default function AlbumDetailScreen() {
         {isGrouped && !showAsSingleRelease && effectiveAlbumIds.length > 1 ? (
           <>
             <View style={styles.albumActions}>
-              <Button mode="outlined" compact onPress={handleShare} style={styles.albumActionBtn} icon="share-variant">
+              <Button mode="outlined" compact onPress={handleShare} style={styles.shareActionBtn} icon="share-variant">
                 Share
               </Button>
             </View>
@@ -451,6 +570,12 @@ export default function AlbumDetailScreen() {
           </>
         )}
       </ScrollView>
+      <ZoomableArtworkModal
+        visible={artworkModalVisible}
+        albumId={primaryAlbumId}
+        title={displayTitle}
+        onClose={() => setArtworkModalVisible(false)}
+      />
     </View>
   );
 }
@@ -464,8 +589,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   artwork: {
-    alignSelf: 'center',
     marginVertical: 24,
+  },
+  artworkPressable: {
+    alignSelf: 'center',
   },
   title: {
     color: '#fff',
@@ -484,6 +611,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   albumActions: {
+    width: '100%',
+    maxWidth: 360,
     alignSelf: 'center',
     marginBottom: 16,
   },
@@ -497,6 +626,10 @@ const styles = StyleSheet.create({
   },
   albumActionBtn: {
     flex: 1,
+  },
+  shareActionBtn: {
+    alignSelf: 'center',
+    minWidth: 160,
   },
   trackActions: {
     flexDirection: 'row',

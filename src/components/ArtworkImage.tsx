@@ -19,16 +19,32 @@ interface Props {
   defer?: boolean;
 }
 
+const NATIVE_ARTWORK_RETRY_DELAYS_MS = [300, 800];
+
 export default function ArtworkImage({ type, id, size = 64, style, borderRadius, defer }: Props) {
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(!defer);
+  const [retryCount, setRetryCount] = useState(0);
   const containerRef = useRef<View>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!defer || visible) return;
     if (Platform.OS !== 'web') {
-      setVisible(true);
-      return;
+      // Native has no IntersectionObserver; stagger deferred image starts to avoid burst loads.
+      const delayMs = (id % 8) * 40;
+      const timeout = setTimeout(() => setVisible(true), delayMs);
+      return () => clearTimeout(timeout);
     }
     const node = containerRef.current as unknown as HTMLElement | null;
     if (!node || typeof node.addEventListener !== 'function') {
@@ -43,15 +59,41 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [defer, visible]);
+  }, [defer, visible, id]);
 
   const token = useAuthStore((s) => s.token);
   let uri = api.getArtworkUrl(type, id);
   if (token) uri += (uri.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  if (Platform.OS !== 'web' && retryCount > 0) {
+    uri += (uri.includes('?') ? '&' : '?') + 'retry=' + String(retryCount);
+  }
   const uriInvalid = !uri || typeof uri !== 'string' || uri.includes('undefined');
+
+  useEffect(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    setFailed(false);
+    setRetryCount(0);
+  }, [type, id, token]);
 
   const radius = borderRadius ?? size / 8;
   const boxStyle = { width: size, height: size, borderRadius: radius };
+
+  const handleNativeImageError = () => {
+    if (failed) return;
+    if (retryTimerRef.current) return;
+    if (retryCount >= NATIVE_ARTWORK_RETRY_DELAYS_MS.length) {
+      setFailed(true);
+      return;
+    }
+    const delayMs = NATIVE_ARTWORK_RETRY_DELAYS_MS[retryCount] ?? 500;
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null;
+      setRetryCount((current) => current + 1);
+    }, delayMs);
+  };
 
   if (!visible) {
     if (Platform.OS === 'web') {
@@ -117,7 +159,9 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
       <Image
         source={{ uri }}
         style={boxStyle}
-        onError={() => setFailed(true)}
+        resizeMethod="resize"
+        resizeMode="cover"
+        onError={handleNativeImageError}
       />
     </View>
   );

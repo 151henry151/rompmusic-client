@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, TouchableOpacity, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator, Image, RefreshControl } from 'react-native';
+import { ScrollView, StyleSheet, View, TouchableOpacity, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, NativeTouchEvent, Platform, ActivityIndicator, Image, RefreshControl, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, IconButton, Menu, Divider, List, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -25,6 +25,13 @@ const CARD_GAP = 10;
 const HORIZONTAL_PADDING = 16;
 const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
+const MIN_ALBUMS_PER_ROW = 1;
+const MAX_ALBUMS_PER_ROW = 12;
+const SECTION_INDEX_STRIP_WIDTH = 28;
+const SECTION_INDEX_STRIP_RIGHT = 16;
+const SECTION_INDEX_RESERVED_SPACE = SECTION_INDEX_STRIP_WIDTH + SECTION_INDEX_STRIP_RIGHT + 8;
+const PINCH_SCALE_MIN = 0.4;
+const PINCH_SCALE_MAX = 3;
 /** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
 const LIBRARY_ARTISTS_PAGE_SIZE = 80;
 /** Android: smaller initial page to avoid OOM/native crash from 80+ concurrent Image loads. */
@@ -86,6 +93,17 @@ function firstLetterKey(s: string): string {
   const trimmed = (s || '').trim();
   const first = trimmed.charAt(0).toUpperCase();
   return /[A-Z]/.test(first) ? first : '#';
+}
+
+function clampAlbumsPerRow(value: number): number {
+  return Math.max(MIN_ALBUMS_PER_ROW, Math.min(MAX_ALBUMS_PER_ROW, value));
+}
+
+function getPinchDistance(event: NativeSyntheticEvent<NativeTouchEvent>): number | null {
+  const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
+  if (!Array.isArray(touches) || touches.length < 2) return null;
+  const [first, second] = touches;
+  return Math.hypot(second.pageX - first.pageX, second.pageY - first.pageY);
 }
 
 function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { letter: string; items: T[] }[] {
@@ -151,12 +169,14 @@ function SectionIndex({
 const sectionIndexStyles = StyleSheet.create({
   strip: {
     position: 'absolute',
-    right: 16,
+    right: SECTION_INDEX_STRIP_RIGHT,
     top: 0,
     bottom: 0,
-    width: 28,
+    width: SECTION_INDEX_STRIP_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#0a0a0a',
+    borderRadius: 12,
   },
   column: {
     alignItems: 'center',
@@ -216,8 +236,25 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
-  const cardsPerRow = isMobile ? 4 : 5;
-  const cardWidth = Math.max(100, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
+  const defaultAlbumsPerRow = isMobile ? 3 : 5;
+  const [albumsPerRow, setAlbumsPerRow] = useState(defaultAlbumsPerRow);
+  const pinchScale = useRef(new Animated.Value(1)).current;
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartAlbumsPerRowRef = useRef(defaultAlbumsPerRow);
+  const pinchScaleCurrentRef = useRef(1);
+  const isPinchingRef = useRef(false);
+  const albumsShowSectionIndex =
+    tab === 'albums' &&
+    !searchQuery &&
+    sortBy.albums !== 'date_added' &&
+    sortBy.albums !== 'random';
+  useEffect(() => {
+    setAlbumsPerRow((current) => clampAlbumsPerRow(current || defaultAlbumsPerRow));
+  }, [defaultAlbumsPerRow]);
+  const cardsPerRow = clampAlbumsPerRow(albumsPerRow);
+  const cardsPerRowForSkeleton = Math.max(1, Math.round(cardsPerRow));
+  const availableGridWidth = width - HORIZONTAL_PADDING * 2 - (albumsShowSectionIndex ? SECTION_INDEX_RESERVED_SPACE : 0);
+  const cardWidth = Math.max(20, (availableGridWidth - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
   const currentSortBy = tab === 'artists' ? sortBy.artists : sortBy.albums;
   const sortOptions = tab === 'artists' ? ARTIST_SORTS : ALBUM_SORTS;
@@ -410,10 +447,14 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     if (searchQuery) return;
+    // Native: avoid eager full-library prefetch (can trigger too many concurrent artwork loads).
+    if (Platform.OS !== 'web') return;
     if (hasMoreArtists && !artistsLoadingMore && !artistsLoading) fetchMoreArtists();
   }, [searchQuery, hasMoreArtists, artistsLoadingMore, artistsLoading, fetchMoreArtists]);
   useEffect(() => {
     if (searchQuery) return;
+    // Native: load additional pages from scroll/section-jump only.
+    if (Platform.OS !== 'web') return;
     if (hasMoreAlbums && !albumsLoadingMore && !albumsLoading) fetchMoreAlbums();
   }, [searchQuery, hasMoreAlbums, albumsLoadingMore, albumsLoading, fetchMoreAlbums]);
 
@@ -707,6 +748,81 @@ export default function LibraryScreen() {
   const handleTrackPlay = (track: Track & { album_title?: string; artist_name?: string }, queue: (Track & { album_title?: string; artist_name?: string })[] | undefined) => {
     playTrack(track, queue || []);
   };
+
+  const resetPinchTracking = useCallback((nextStart = cardsPerRow) => {
+    pinchStartDistanceRef.current = null;
+    pinchStartAlbumsPerRowRef.current = nextStart;
+    pinchScaleCurrentRef.current = 1;
+    isPinchingRef.current = false;
+  }, [cardsPerRow]);
+
+  const settlePinchScale = useCallback(() => {
+    Animated.spring(pinchScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      mass: 0.5,
+      damping: 26,
+      stiffness: 260,
+    }).start();
+  }, [pinchScale]);
+
+  const handleAlbumGridTouchStart = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    if (tab !== 'albums' || !!searchQuery) return;
+    const distance = getPinchDistance(event);
+    if (!distance) return;
+    pinchScale.stopAnimation();
+    pinchScale.setValue(1);
+    pinchScaleCurrentRef.current = 1;
+    isPinchingRef.current = true;
+    pinchStartDistanceRef.current = distance;
+    pinchStartAlbumsPerRowRef.current = cardsPerRow;
+  }, [tab, searchQuery, cardsPerRow, pinchScale]);
+
+  const handleAlbumGridTouchMove = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    if (tab !== 'albums' || !!searchQuery) return;
+    const distance = getPinchDistance(event);
+    if (!distance) return;
+    const startDistance = pinchStartDistanceRef.current;
+    if (!startDistance || startDistance <= 0 || !isPinchingRef.current) {
+      pinchStartDistanceRef.current = distance;
+      pinchStartAlbumsPerRowRef.current = cardsPerRow;
+      isPinchingRef.current = true;
+      pinchScale.stopAnimation();
+      pinchScale.setValue(1);
+      pinchScaleCurrentRef.current = 1;
+      return;
+    }
+    const scale = Math.max(PINCH_SCALE_MIN, Math.min(PINCH_SCALE_MAX, distance / startDistance));
+    pinchScaleCurrentRef.current = scale;
+    pinchScale.setValue(scale);
+  }, [tab, searchQuery, cardsPerRow, pinchScale]);
+
+  const handleAlbumGridTouchEnd = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touches = event.nativeEvent.touches as unknown as Array<unknown>;
+    if (Array.isArray(touches) && touches.length >= 2) return;
+    if (tab !== 'albums' || !!searchQuery) {
+      resetPinchTracking();
+      settlePinchScale();
+      return;
+    }
+    if (!isPinchingRef.current) {
+      resetPinchTracking();
+      settlePinchScale();
+      return;
+    }
+    const finalScale = pinchScaleCurrentRef.current || 1;
+    const target = clampAlbumsPerRow(pinchStartAlbumsPerRowRef.current / finalScale);
+    setAlbumsPerRow(target);
+    resetPinchTracking(target);
+    settlePinchScale();
+  }, [tab, searchQuery, resetPinchTracking, settlePinchScale]);
+
+  useEffect(() => {
+    if (tab !== 'albums' || !!searchQuery) {
+      resetPinchTracking();
+      settlePinchScale();
+    }
+  }, [tab, searchQuery, resetPinchTracking, settlePinchScale]);
 
   const hasSuggestions = !searchQuery && suggestionData && debouncedSuggestQuery.length >= 2;
   const showSuggestions = hasSuggestions && (suggestionData.artists?.length > 0 || suggestionData.albums?.length > 0 || suggestionData.tracks?.length > 0);
@@ -1088,6 +1204,10 @@ export default function LibraryScreen() {
           ref={setScrollViewRef}
           onScroll={handleScroll}
           scrollEventThrottle={32}
+          onTouchStart={handleAlbumGridTouchStart}
+          onTouchMove={handleAlbumGridTouchMove}
+          onTouchEnd={handleAlbumGridTouchEnd}
+          onTouchCancel={handleAlbumGridTouchEnd}
           style={styles.scrollContent}
           contentContainerStyle={{ paddingBottom: 24 }}
           refreshControl={
@@ -1260,9 +1380,14 @@ export default function LibraryScreen() {
 
       {!searchQuery && tab === 'albums' && (
         <>
-          <View style={styles.sectionListContent} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
+          <Animated.View
+            style={[styles.sectionListContent, { transform: [{ scale: pinchScale }] }]}
+            onLayout={(e) => {
+              listContentTopRef.current = e.nativeEvent.layout.y;
+            }}
+          >
             {sectionKeys.length === 0 ? (
-              <View style={[styles.grid, styles.sectionBlock]}>
+              <View style={[styles.grid, albumsShowSectionIndex && styles.gridWithSectionIndex, styles.sectionBlock]}>
                 {albumGroups.map((g) => renderAlbumCard(g))}
               </View>
             ) : (
@@ -1275,14 +1400,14 @@ export default function LibraryScreen() {
                   <React.Fragment key={key}>
                     {renderSectionHeader(key, items.length > 0 || loading)}
                     {items.length > 0 ? (
-                      <View style={[styles.grid, styles.sectionBlock]}>
+                      <View style={[styles.grid, albumsShowSectionIndex && styles.gridWithSectionIndex, styles.sectionBlock]}>
                         {items.map((g) => renderAlbumCard(g))}
                       </View>
                     ) : loading ? (
                       <View style={styles.loadingSectionPlaceholder}>
                         <ActivityIndicator size="small" color="#4a9eff" style={styles.loadingSectionSpinner} />
                         <View style={styles.skeletonGrid}>
-                          {Array.from({ length: cardsPerRow * 2 }).map((_, i) => (
+                          {Array.from({ length: cardsPerRowForSkeleton * 2 }).map((_, i) => (
                             <View key={i} style={[styles.skeletonCard, { width: cardWidth }]} />
                           ))}
                         </View>
@@ -1294,7 +1419,7 @@ export default function LibraryScreen() {
                 );
               })
             )}
-          </View>
+          </Animated.View>
           {albumsLoadingMore && (
             <View style={styles.loadingMoreRow}>
               <Text variant="bodySmall" style={styles.loadingText}>Loading…</Text>
@@ -1415,6 +1540,9 @@ const styles = StyleSheet.create({
     padding: HORIZONTAL_PADDING,
     paddingTop: 8,
     gap: CARD_GAP,
+  },
+  gridWithSectionIndex: {
+    paddingRight: HORIZONTAL_PADDING + SECTION_INDEX_RESERVED_SPACE,
   },
   card: {
     marginBottom: CARD_GAP,

@@ -1,0 +1,34 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 04486e2..3ea81cf 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -136,11 +136,11 @@ class AudioControlsService : MediaSessionService() {
+     val session = mediaSession ?: return
+     val customLayout = mutableListOf<CommandButton>()
+ 
+-    // Add seek backward button if enabled
++    // Add previous-track style button (wired to 10s seek command; JS maps that to queue previous/next)
+     if (currentOptions?.showSeekBackward == true) {
+       customLayout.add(
+-        CommandButton.Builder(CommandButton.ICON_SKIP_BACK)
+-          .setDisplayName("Seek Backward")
++        CommandButton.Builder(CommandButton.ICON_PREVIOUS)
++          .setDisplayName("Previous")
+           .setEnabled(true)
+           .setSessionCommand(SessionCommand(ACTION_SEEK_BACKWARD, Bundle.EMPTY))
+           .build()
+@@ -156,11 +156,11 @@ class AudioControlsService : MediaSessionService() {
+         .build()
+     )
+ 
+-    // Add seek forward button if enabled
++    // Add next-track style button (wired to 10s seek command; JS maps that to queue previous/next)
+     if (currentOptions?.showSeekForward == true) {
+       customLayout.add(
+-        CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD)
+-          .setDisplayName("Seek Forward")
++        CommandButton.Builder(CommandButton.ICON_NEXT)
++          .setDisplayName("Next")
+           .setEnabled(true)
+           .setSessionCommand(SessionCommand(ACTION_SEEK_FORWARD, Bundle.EMPTY))
+           .build()
