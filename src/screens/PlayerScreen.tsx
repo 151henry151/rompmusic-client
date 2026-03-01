@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, ScrollView, PanResponder, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, NativeSyntheticEvent, NativeTouchEvent } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, IconButton, List, Switch } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -20,8 +20,6 @@ interface Props {
 }
 
 const SWIPE_DISMISS_MIN_DRAG = 72;
-const SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY = 44;
-const SWIPE_DISMISS_MAX_START_SCROLL_Y = 18;
 const SWIPE_DISMISS_DIRECTION_BIAS = 0.6;
 
 function formatTime(seconds: number): string {
@@ -58,65 +56,61 @@ export default function PlayerScreen({ onClose }: Props) {
     if (!currentTrack) onClose();
   }, [currentTrack, onClose]);
 
-  const scrollOffsetYRef = React.useRef(0);
   const dismissTriggeredRef = React.useRef(false);
-  const maxSwipeDownDistanceRef = React.useRef(0);
-  const shouldCaptureSwipeDown = React.useCallback((gesture: { dy: number; dx: number }) => {
-    if (gesture.dy <= 10) return false;
-    if (Math.abs(gesture.dy) < Math.abs(gesture.dx) * SWIPE_DISMISS_DIRECTION_BIAS) return false;
-    if (scrollOffsetYRef.current <= SWIPE_DISMISS_MAX_START_SCROLL_Y) return true;
-    return gesture.dy >= SWIPE_DISMISS_MIN_DRAG;
+  const swipeTouchStateRef = React.useRef({ active: false, startX: 0, startY: 0, maxDy: 0 });
+  const triggerSwipeDismiss = React.useCallback(() => {
+    if (dismissTriggeredRef.current) return;
+    dismissTriggeredRef.current = true;
+    onClose();
+    setTimeout(() => {
+      dismissTriggeredRef.current = false;
+    }, 300);
+  }, [onClose]);
+  const getPrimaryTouch = React.useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
+    if (!Array.isArray(touches) || touches.length === 0) return null;
+    return touches[0];
   }, []);
-  const swipeDownResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
-        onMoveShouldSetPanResponderCapture: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
-        onPanResponderGrant: () => {
-          maxSwipeDownDistanceRef.current = 0;
-        },
-        onPanResponderMove: (_evt, gesture) => {
-          if (gesture.dy > maxSwipeDownDistanceRef.current) {
-            maxSwipeDownDistanceRef.current = gesture.dy;
-          }
-        },
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderRelease: (_evt, gesture) => {
-          if (dismissTriggeredRef.current) return;
-          const swipeDistance = Math.max(gesture.dy, maxSwipeDownDistanceRef.current);
-          maxSwipeDownDistanceRef.current = 0;
-          if (
-            swipeDistance > SWIPE_DISMISS_MIN_DRAG ||
-            (swipeDistance > SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY && gesture.vy > 0.08)
-          ) {
-            dismissTriggeredRef.current = true;
-            onClose();
-            setTimeout(() => {
-              dismissTriggeredRef.current = false;
-            }, 300);
-          }
-        },
-        onPanResponderTerminate: () => {
-          maxSwipeDownDistanceRef.current = 0;
-        },
-      }),
-    [onClose, shouldCaptureSwipeDown]
-  );
+  const handleSwipeTouchStart = React.useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    swipeTouchStateRef.current = {
+      active: true,
+      startX: touch.pageX,
+      startY: touch.pageY,
+      maxDy: 0,
+    };
+  }, [getPrimaryTouch]);
+  const handleSwipeTouchMove = React.useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const state = swipeTouchStateRef.current;
+    if (!state.active) return;
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    const dx = touch.pageX - state.startX;
+    const dy = touch.pageY - state.startY;
+    if (dy > state.maxDy) state.maxDy = dy;
+    if (state.maxDy < SWIPE_DISMISS_MIN_DRAG) return;
+    if (Math.abs(state.maxDy) < Math.abs(dx) * SWIPE_DISMISS_DIRECTION_BIAS) return;
+    state.active = false;
+    triggerSwipeDismiss();
+  }, [getPrimaryTouch, triggerSwipeDismiss]);
+  const handleSwipeTouchEnd = React.useCallback(() => {
+    swipeTouchStateRef.current.active = false;
+  }, []);
 
   if (!currentTrack) return null;
 
   const progress = duration > 0 ? position / duration : 0;
 
   return (
-    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+    <View style={styles.container}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        {...swipeDownResponder.panHandlers}
-        onScroll={(e) => {
-          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
+        onTouchStart={handleSwipeTouchStart}
+        onTouchMove={handleSwipeTouchMove}
+        onTouchEnd={handleSwipeTouchEnd}
+        onTouchCancel={handleSwipeTouchEnd}
       >
         <IconButton
           icon="close"

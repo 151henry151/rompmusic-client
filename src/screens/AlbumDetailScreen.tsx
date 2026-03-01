@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share, PanResponder, Pressable } from 'react-native';
+import { ScrollView, StyleSheet, View, Platform, Share, Pressable, NativeSyntheticEvent, NativeTouchEvent } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -27,8 +27,6 @@ type RootStackParamList = {
 
 const RELATED_ALBUM_SEARCH_LIMIT = 250;
 const SWIPE_DISMISS_MIN_DRAG = 72;
-const SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY = 44;
-const SWIPE_DISMISS_MAX_START_SCROLL_Y = 18;
 const SWIPE_DISMISS_DIRECTION_BIAS = 0.6;
 
 function formatDuration(seconds: number): string {
@@ -159,51 +157,47 @@ export default function AlbumDetailScreen() {
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
-  const scrollOffsetYRef = React.useRef(0);
   const dismissTriggeredRef = React.useRef(false);
-  const maxSwipeDownDistanceRef = React.useRef(0);
-  const shouldCaptureSwipeDown = React.useCallback((gesture: { dy: number; dx: number }) => {
-    if (gesture.dy <= 10) return false;
-    if (Math.abs(gesture.dy) < Math.abs(gesture.dx) * SWIPE_DISMISS_DIRECTION_BIAS) return false;
-    if (scrollOffsetYRef.current <= SWIPE_DISMISS_MAX_START_SCROLL_Y) return true;
-    return gesture.dy >= SWIPE_DISMISS_MIN_DRAG;
+  const swipeTouchStateRef = React.useRef({ active: false, startX: 0, startY: 0, maxDy: 0 });
+  const triggerSwipeDismiss = useCallback(() => {
+    if (dismissTriggeredRef.current) return;
+    dismissTriggeredRef.current = true;
+    navigation.goBack();
+    setTimeout(() => {
+      dismissTriggeredRef.current = false;
+    }, 300);
+  }, [navigation]);
+  const getPrimaryTouch = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
+    if (!Array.isArray(touches) || touches.length === 0) return null;
+    return touches[0];
   }, []);
-
-  const swipeDownResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
-        onMoveShouldSetPanResponderCapture: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
-        onPanResponderGrant: () => {
-          maxSwipeDownDistanceRef.current = 0;
-        },
-        onPanResponderMove: (_evt, gesture) => {
-          if (gesture.dy > maxSwipeDownDistanceRef.current) {
-            maxSwipeDownDistanceRef.current = gesture.dy;
-          }
-        },
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderRelease: (_evt, gesture) => {
-          if (dismissTriggeredRef.current) return;
-          const swipeDistance = Math.max(gesture.dy, maxSwipeDownDistanceRef.current);
-          maxSwipeDownDistanceRef.current = 0;
-          if (
-            swipeDistance > SWIPE_DISMISS_MIN_DRAG ||
-            (swipeDistance > SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY && gesture.vy > 0.08)
-          ) {
-            dismissTriggeredRef.current = true;
-            navigation.goBack();
-            setTimeout(() => {
-              dismissTriggeredRef.current = false;
-            }, 300);
-          }
-        },
-        onPanResponderTerminate: () => {
-          maxSwipeDownDistanceRef.current = 0;
-        },
-      }),
-    [navigation, shouldCaptureSwipeDown]
-  );
+  const handleSwipeTouchStart = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    swipeTouchStateRef.current = {
+      active: true,
+      startX: touch.pageX,
+      startY: touch.pageY,
+      maxDy: 0,
+    };
+  }, [getPrimaryTouch]);
+  const handleSwipeTouchMove = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const state = swipeTouchStateRef.current;
+    if (!state.active) return;
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    const dx = touch.pageX - state.startX;
+    const dy = touch.pageY - state.startY;
+    if (dy > state.maxDy) state.maxDy = dy;
+    if (state.maxDy < SWIPE_DISMISS_MIN_DRAG) return;
+    if (Math.abs(state.maxDy) < Math.abs(dx) * SWIPE_DISMISS_DIRECTION_BIAS) return;
+    state.active = false;
+    triggerSwipeDismiss();
+  }, [getPrimaryTouch, triggerSwipeDismiss]);
+  const handleSwipeTouchEnd = useCallback(() => {
+    swipeTouchStateRef.current.active = false;
+  }, []);
 
   const albumQueries = useQueries({
     queries: effectiveAlbumIds.map((id) => ({
@@ -387,8 +381,14 @@ export default function AlbumDetailScreen() {
 
   if (effectiveAlbumIds.length === 0) {
     return (
-      <View style={styles.container} {...swipeDownResponder.panHandlers}>
-        <ScrollView style={styles.scroll}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          onTouchStart={handleSwipeTouchStart}
+          onTouchMove={handleSwipeTouchMove}
+          onTouchEnd={handleSwipeTouchEnd}
+          onTouchCancel={handleSwipeTouchEnd}
+        >
           <Text style={styles.muted}>No album selected.</Text>
         </ScrollView>
       </View>
@@ -397,8 +397,14 @@ export default function AlbumDetailScreen() {
 
   if (isLoading || !primaryAlbum) {
     return (
-      <View style={styles.container} {...swipeDownResponder.panHandlers}>
-        <ScrollView style={styles.scroll}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          onTouchStart={handleSwipeTouchStart}
+          onTouchMove={handleSwipeTouchMove}
+          onTouchEnd={handleSwipeTouchEnd}
+          onTouchCancel={handleSwipeTouchEnd}
+        >
           <Text style={styles.muted}>Loading...</Text>
         </ScrollView>
       </View>
@@ -406,14 +412,13 @@ export default function AlbumDetailScreen() {
   }
 
   return (
-    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+    <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        {...swipeDownResponder.panHandlers}
-        onScroll={(e) => {
-          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
+        onTouchStart={handleSwipeTouchStart}
+        onTouchMove={handleSwipeTouchMove}
+        onTouchEnd={handleSwipeTouchEnd}
+        onTouchCancel={handleSwipeTouchEnd}
       >
         {shareFeedback ? (
           <View style={styles.shareFeedbackWrap}>

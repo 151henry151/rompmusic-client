@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, Platform, Share, Alert, View, PanResponder } from 'react-native';
+import { ScrollView, StyleSheet, Platform, Share, Alert, View, NativeSyntheticEvent, NativeTouchEvent } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -22,8 +22,6 @@ type RootStackParamList = {
 };
 
 const SWIPE_DISMISS_MIN_DRAG = 72;
-const SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY = 44;
-const SWIPE_DISMISS_MAX_START_SCROLL_Y = 18;
 const SWIPE_DISMISS_DIRECTION_BIAS = 0.6;
 
 function formatDuration(seconds: number): string {
@@ -39,51 +37,47 @@ export default function TrackDetailScreen() {
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
-  const scrollOffsetYRef = React.useRef(0);
   const dismissTriggeredRef = React.useRef(false);
-  const maxSwipeDownDistanceRef = React.useRef(0);
-  const shouldCaptureSwipeDown = React.useCallback((gesture: { dy: number; dx: number }) => {
-    if (gesture.dy <= 10) return false;
-    if (Math.abs(gesture.dy) < Math.abs(gesture.dx) * SWIPE_DISMISS_DIRECTION_BIAS) return false;
-    if (scrollOffsetYRef.current <= SWIPE_DISMISS_MAX_START_SCROLL_Y) return true;
-    return gesture.dy >= SWIPE_DISMISS_MIN_DRAG;
+  const swipeTouchStateRef = React.useRef({ active: false, startX: 0, startY: 0, maxDy: 0 });
+  const triggerSwipeDismiss = React.useCallback(() => {
+    if (dismissTriggeredRef.current) return;
+    dismissTriggeredRef.current = true;
+    navigation.goBack();
+    setTimeout(() => {
+      dismissTriggeredRef.current = false;
+    }, 300);
+  }, [navigation]);
+  const getPrimaryTouch = React.useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
+    if (!Array.isArray(touches) || touches.length === 0) return null;
+    return touches[0];
   }, []);
-
-  const swipeDownResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
-        onMoveShouldSetPanResponderCapture: (_evt, gesture) => shouldCaptureSwipeDown(gesture),
-        onPanResponderGrant: () => {
-          maxSwipeDownDistanceRef.current = 0;
-        },
-        onPanResponderMove: (_evt, gesture) => {
-          if (gesture.dy > maxSwipeDownDistanceRef.current) {
-            maxSwipeDownDistanceRef.current = gesture.dy;
-          }
-        },
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderRelease: (_evt, gesture) => {
-          if (dismissTriggeredRef.current) return;
-          const swipeDistance = Math.max(gesture.dy, maxSwipeDownDistanceRef.current);
-          maxSwipeDownDistanceRef.current = 0;
-          if (
-            swipeDistance > SWIPE_DISMISS_MIN_DRAG ||
-            (swipeDistance > SWIPE_DISMISS_MIN_DRAG_WITH_VELOCITY && gesture.vy > 0.08)
-          ) {
-            dismissTriggeredRef.current = true;
-            navigation.goBack();
-            setTimeout(() => {
-              dismissTriggeredRef.current = false;
-            }, 300);
-          }
-        },
-        onPanResponderTerminate: () => {
-          maxSwipeDownDistanceRef.current = 0;
-        },
-      }),
-    [navigation, shouldCaptureSwipeDown]
-  );
+  const handleSwipeTouchStart = React.useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    swipeTouchStateRef.current = {
+      active: true,
+      startX: touch.pageX,
+      startY: touch.pageY,
+      maxDy: 0,
+    };
+  }, [getPrimaryTouch]);
+  const handleSwipeTouchMove = React.useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const state = swipeTouchStateRef.current;
+    if (!state.active) return;
+    const touch = getPrimaryTouch(event);
+    if (!touch) return;
+    const dx = touch.pageX - state.startX;
+    const dy = touch.pageY - state.startY;
+    if (dy > state.maxDy) state.maxDy = dy;
+    if (state.maxDy < SWIPE_DISMISS_MIN_DRAG) return;
+    if (Math.abs(state.maxDy) < Math.abs(dx) * SWIPE_DISMISS_DIRECTION_BIAS) return;
+    state.active = false;
+    triggerSwipeDismiss();
+  }, [getPrimaryTouch, triggerSwipeDismiss]);
+  const handleSwipeTouchEnd = React.useCallback(() => {
+    swipeTouchStateRef.current.active = false;
+  }, []);
 
   const { data: track, isLoading } = useQuery({
     queryKey: ['track', trackId],
@@ -92,8 +86,14 @@ export default function TrackDetailScreen() {
 
   if (isLoading || !track) {
     return (
-      <View style={styles.container} {...swipeDownResponder.panHandlers}>
-        <ScrollView style={styles.scroll}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          onTouchStart={handleSwipeTouchStart}
+          onTouchMove={handleSwipeTouchMove}
+          onTouchEnd={handleSwipeTouchEnd}
+          onTouchCancel={handleSwipeTouchEnd}
+        >
           <Text style={styles.muted}>Loading...</Text>
         </ScrollView>
       </View>
@@ -158,15 +158,14 @@ export default function TrackDetailScreen() {
   };
 
   return (
-    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+    <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        {...swipeDownResponder.panHandlers}
-        onScroll={(e) => {
-          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
+        onTouchStart={handleSwipeTouchStart}
+        onTouchMove={handleSwipeTouchMove}
+        onTouchEnd={handleSwipeTouchEnd}
+        onTouchCancel={handleSwipeTouchEnd}
       >
         <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
         <Text variant="headlineSmall" style={styles.title}>
