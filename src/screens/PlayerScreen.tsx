@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, PanResponder } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, IconButton, List, Switch } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -51,12 +51,45 @@ export default function PlayerScreen({ onClose }: Props) {
     if (!currentTrack) onClose();
   }, [currentTrack, onClose]);
 
+  const scrollOffsetYRef = React.useRef(0);
+  const dismissTriggeredRef = React.useRef(false);
+  const swipeDownResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
+          scrollOffsetYRef.current <= 4 &&
+          gesture.dy > 8 &&
+          Math.abs(gesture.dy) >= Math.abs(gesture.dx) * 0.9,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderRelease: (_evt, gesture) => {
+          if (dismissTriggeredRef.current) return;
+          if (gesture.dy > 56 || (gesture.dy > 32 && gesture.vy > 0.12)) {
+            dismissTriggeredRef.current = true;
+            onClose();
+            setTimeout(() => {
+              dismissTriggeredRef.current = false;
+            }, 300);
+          }
+        },
+      }),
+    [onClose]
+  );
+
   if (!currentTrack) return null;
 
   const progress = duration > 0 ? position / duration : 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.container} {...swipeDownResponder.panHandlers}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        {...swipeDownResponder.panHandlers}
+        onScroll={(e) => {
+          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+      >
       <IconButton
         icon="close"
         onPress={onClose}
@@ -162,7 +195,8 @@ export default function PlayerScreen({ onClose }: Props) {
           ))}
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 

@@ -102,6 +102,14 @@ function stopAndRemoveAllPlayers(): void {
 
 function removePlayer(p: AudioPlayer | null): void {
   if (!p) return;
+  // Deactivate lock-screen ownership before removing to avoid races where
+  // a released old player clears metadata for the new active player.
+  try {
+    const deactivate = (p as { setActiveForLockScreen?: (active: boolean) => void }).setActiveForLockScreen;
+    deactivate?.call(p, false);
+  } catch {
+    /* ignore */
+  }
   try {
     p.pause();
   } catch {

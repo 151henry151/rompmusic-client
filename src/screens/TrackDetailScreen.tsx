@@ -41,13 +41,13 @@ export default function TrackDetailScreen() {
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
-          scrollOffsetYRef.current <= 0 &&
-          gesture.dy > 16 &&
-          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.1,
+          scrollOffsetYRef.current <= 4 &&
+          gesture.dy > 8 &&
+          Math.abs(gesture.dy) >= Math.abs(gesture.dx) * 0.9,
         onPanResponderTerminationRequest: () => false,
         onPanResponderRelease: (_evt, gesture) => {
           if (dismissTriggeredRef.current) return;
-          if (gesture.dy > 90 && gesture.vy > 0.25) {
+          if (gesture.dy > 56 || (gesture.dy > 32 && gesture.vy > 0.12)) {
             dismissTriggeredRef.current = true;
             navigation.goBack();
             setTimeout(() => {
@@ -136,6 +136,7 @@ export default function TrackDetailScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
+        {...swipeDownResponder.panHandlers}
         onScroll={(e) => {
           scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
         }}
