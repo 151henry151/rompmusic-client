@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Album grid pinch zoom UX (Android/Web)** — Reworked pinch handling to use smooth live gesture scaling with commit-on-release layout updates, eliminating jerky delayed jumps while zooming.
+- **Album grid default density + section index spacing** — Restored the default library album density to the previous 3-per-row mobile feel and reserved right-side space so the A–Z section index no longer overlays album covers.
 - **Album detail action layout (Android)** — Share button no longer expands incorrectly and pushes track content off-screen on certain albums; action rows now use explicit sizing for single-share vs two-button rows.
 - **Swipe-down dismiss on detail screens (Android)** — Improved gesture responder capture on `AlbumDetail` and `TrackDetail` so swipe-down-to-go-back is detected more reliably when starting from scroll position top.
 - **Android launcher icon crop** — Added padded Android icon/adaptive foreground assets and wired them in `app.json` to preserve transparent edge padding on devices that mask/crop launcher icons more aggressively.
