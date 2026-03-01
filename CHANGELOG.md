@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Album grid pinch zoom** — Library album list now supports pinch-to-zoom with a dynamic 1–12 albums-per-row range (default remains 4 on mobile / 5 on larger widths).
+- **Zoomable album artwork modal** — Tapping album art on `AlbumDetail` and full-screen `Player` opens a zoom modal with pinch zoom and quick reset.
+
 ### Fixed
 
 - **Album detail action layout (Android)** — Share button no longer expands incorrectly and pushes track content off-screen on certain albums; action rows now use explicit sizing for single-share vs two-button rows.
 - **Swipe-down dismiss on detail screens (Android)** — Improved gesture responder capture on `AlbumDetail` and `TrackDetail` so swipe-down-to-go-back is detected more reliably when starting from scroll position top.
+- **Android launcher icon crop** — Added padded Android icon/adaptive foreground assets and wired them in `app.json` to preserve transparent edge padding on devices that mask/crop launcher icons more aggressively.
 - **Expo SDK dependency validation** — Pinned `expo-build-properties` back to `~1.0.10` for Expo SDK 54 compatibility so `expo doctor` passes during EAS builds.
 - **Deep library album art on Android** — Reduced native eager prefetch pressure in Library and hardened album-art loading retries/resizing so album covers continue loading while scrolling deep into large album lists instead of falling back to placeholders after transient load failures.
 - **Grouped album details (multi-artist splits)** — Album detail now auto-discovers related album variants when opened from a single split variant and keeps full tracklists by deduping with title+duration (not disc/track slot only), fixing cases like Doo-Bop showing one track and wrong/no cover in detail view.

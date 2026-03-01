@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, TouchableOpacity, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Platform, ActivityIndicator, Image, RefreshControl } from 'react-native';
+import { ScrollView, StyleSheet, View, TouchableOpacity, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, NativeTouchEvent, Platform, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, IconButton, Menu, Divider, List, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -25,6 +25,8 @@ const CARD_GAP = 10;
 const HORIZONTAL_PADDING = 16;
 const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
+const MIN_ALBUMS_PER_ROW = 1;
+const MAX_ALBUMS_PER_ROW = 12;
 /** Page sizes for library lists (server max per request). Load full list by fetching until no more pages. */
 const LIBRARY_ARTISTS_PAGE_SIZE = 80;
 /** Android: smaller initial page to avoid OOM/native crash from 80+ concurrent Image loads. */
@@ -86,6 +88,17 @@ function firstLetterKey(s: string): string {
   const trimmed = (s || '').trim();
   const first = trimmed.charAt(0).toUpperCase();
   return /[A-Z]/.test(first) ? first : '#';
+}
+
+function clampAlbumsPerRow(value: number): number {
+  return Math.max(MIN_ALBUMS_PER_ROW, Math.min(MAX_ALBUMS_PER_ROW, Math.round(value)));
+}
+
+function getPinchDistance(event: NativeSyntheticEvent<NativeTouchEvent>): number | null {
+  const touches = event.nativeEvent.touches as unknown as Array<{ pageX: number; pageY: number }>;
+  if (!Array.isArray(touches) || touches.length < 2) return null;
+  const [first, second] = touches;
+  return Math.hypot(second.pageX - first.pageX, second.pageY - first.pageY);
 }
 
 function groupByFirstLetter<T>(items: T[], getLabel: (item: T) => string): { letter: string; items: T[] }[] {
@@ -216,8 +229,15 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
-  const cardsPerRow = isMobile ? 4 : 5;
-  const cardWidth = Math.max(100, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
+  const defaultAlbumsPerRow = isMobile ? 4 : 5;
+  const [albumsPerRow, setAlbumsPerRow] = useState(defaultAlbumsPerRow);
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartAlbumsPerRowRef = useRef(defaultAlbumsPerRow);
+  useEffect(() => {
+    setAlbumsPerRow((current) => clampAlbumsPerRow(current || defaultAlbumsPerRow));
+  }, [defaultAlbumsPerRow]);
+  const cardsPerRow = clampAlbumsPerRow(albumsPerRow);
+  const cardWidth = Math.max(20, (width - HORIZONTAL_PADDING * 2 - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
   const currentSortBy = tab === 'artists' ? sortBy.artists : sortBy.albums;
   const sortOptions = tab === 'artists' ? ARTIST_SORTS : ALBUM_SORTS;
@@ -712,6 +732,44 @@ export default function LibraryScreen() {
     playTrack(track, queue || []);
   };
 
+  const resetPinchTracking = useCallback((nextStart = cardsPerRow) => {
+    pinchStartDistanceRef.current = null;
+    pinchStartAlbumsPerRowRef.current = nextStart;
+  }, [cardsPerRow]);
+
+  const handleAlbumGridTouchStart = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    if (tab !== 'albums' || !!searchQuery) return;
+    const distance = getPinchDistance(event);
+    if (!distance) return;
+    pinchStartDistanceRef.current = distance;
+    pinchStartAlbumsPerRowRef.current = cardsPerRow;
+  }, [tab, searchQuery, cardsPerRow]);
+
+  const handleAlbumGridTouchMove = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    if (tab !== 'albums' || !!searchQuery) return;
+    const distance = getPinchDistance(event);
+    if (!distance) return;
+    const startDistance = pinchStartDistanceRef.current;
+    if (!startDistance || startDistance <= 0) {
+      pinchStartDistanceRef.current = distance;
+      pinchStartAlbumsPerRowRef.current = cardsPerRow;
+      return;
+    }
+    const ratio = startDistance / distance;
+    const target = clampAlbumsPerRow(pinchStartAlbumsPerRowRef.current * ratio);
+    setAlbumsPerRow((current) => (current === target ? current : target));
+  }, [tab, searchQuery, cardsPerRow]);
+
+  const handleAlbumGridTouchEnd = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const touches = event.nativeEvent.touches as unknown as Array<unknown>;
+    if (Array.isArray(touches) && touches.length >= 2) return;
+    resetPinchTracking();
+  }, [resetPinchTracking]);
+
+  useEffect(() => {
+    if (tab !== 'albums' || !!searchQuery) resetPinchTracking();
+  }, [tab, searchQuery, resetPinchTracking]);
+
   const hasSuggestions = !searchQuery && suggestionData && debouncedSuggestQuery.length >= 2;
   const showSuggestions = hasSuggestions && (suggestionData.artists?.length > 0 || suggestionData.albums?.length > 0 || suggestionData.tracks?.length > 0);
   const clearSearchAndNavigate = (fn: () => void) => {
@@ -1092,6 +1150,10 @@ export default function LibraryScreen() {
           ref={setScrollViewRef}
           onScroll={handleScroll}
           scrollEventThrottle={32}
+          onTouchStart={handleAlbumGridTouchStart}
+          onTouchMove={handleAlbumGridTouchMove}
+          onTouchEnd={handleAlbumGridTouchEnd}
+          onTouchCancel={handleAlbumGridTouchEnd}
           style={styles.scrollContent}
           contentContainerStyle={{ paddingBottom: 24 }}
           refreshControl={
@@ -1264,6 +1326,11 @@ export default function LibraryScreen() {
 
       {!searchQuery && tab === 'albums' && (
         <>
+          <View style={styles.zoomHintRow}>
+            <Text variant="bodySmall" style={styles.zoomHintText}>
+              Pinch to zoom album grid • {cardsPerRow} per row
+            </Text>
+          </View>
           <View style={styles.sectionListContent} onLayout={(e) => { listContentTopRef.current = e.nativeEvent.layout.y; }}>
             {sectionKeys.length === 0 ? (
               <View style={[styles.grid, styles.sectionBlock]}>
@@ -1412,6 +1479,13 @@ const styles = StyleSheet.create({
   registerButtonLabel: {
     color: '#fff',
     fontSize: 14,
+  },
+  zoomHintRow: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingTop: 8,
+  },
+  zoomHintText: {
+    color: '#6d7a8a',
   },
   grid: {
     flexDirection: 'row',

@@ -24,8 +24,9 @@
       }
     },
     "android": {
+      "icon": "./assets/icon-android-padded.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-foreground-padded.png",
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.rompmusic.app",

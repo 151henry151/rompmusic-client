@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share, PanResponder } from 'react-native';
+import { ScrollView, StyleSheet, View, Platform, Share, PanResponder, Pressable } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
+import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
 import { getPrimaryArtistName } from '../utils/artistMerge';
@@ -286,6 +287,7 @@ export default function AlbumDetailScreen() {
   };
 
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [artworkModalVisible, setArtworkModalVisible] = useState(false);
   const clearShareFeedback = useCallback(() => {
     setShareFeedback(null);
   }, []);
@@ -393,7 +395,14 @@ export default function AlbumDetailScreen() {
             <Text style={styles.shareFeedback}>{shareFeedback}</Text>
           </View>
         ) : null}
-        <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
+        <Pressable
+          onPress={() => setArtworkModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open zoomed album artwork"
+          style={styles.artworkPressable}
+        >
+          <ArtworkImage type="album" id={primaryAlbumId} size={200} style={styles.artwork} />
+        </Pressable>
         <Text variant="headlineSmall" style={styles.title}>
           {displayTitle}
         </Text>
@@ -531,6 +540,12 @@ export default function AlbumDetailScreen() {
           </>
         )}
       </ScrollView>
+      <ZoomableArtworkModal
+        visible={artworkModalVisible}
+        albumId={primaryAlbumId}
+        title={displayTitle}
+        onClose={() => setArtworkModalVisible(false)}
+      />
     </View>
   );
 }
@@ -544,8 +559,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   artwork: {
-    alignSelf: 'center',
     marginVertical: 24,
+  },
+  artworkPressable: {
+    alignSelf: 'center',
   },
   title: {
     color: '#fff',
