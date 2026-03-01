@@ -12,17 +12,41 @@ import { MD3DarkTheme, PaperProvider } from 'react-native-paper';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AppErrorBoundary } from './src/components/AppErrorBoundary';
 import { useAuthStore } from './src/store/authStore';
+import { useServerStore } from './src/store/serverStore';
+import { useSettingsStore } from './src/store/settingsStore';
 import { initAudio } from './src/services/audioService';
 
 const queryClient = new QueryClient();
 
 function AppContent() {
+  const restoreServerUrl = useServerStore((s) => s.restoreServerUrl);
   const restoreSession = useAuthStore((s) => s.restoreSession);
+  const restoreSettings = useSettingsStore((s) => s.restoreSettings);
 
   useEffect(() => {
-    initAudio().catch(() => {});
-    restoreSession();
-  }, [restoreSession]);
+    (async () => {
+      try {
+        await initAudio();
+      } catch (error) {
+        console.error('Audio initialization failed', error);
+      }
+      try {
+        await restoreServerUrl();
+      } catch (error) {
+        console.error('Server URL restoration failed', error);
+      }
+      try {
+        await restoreSession();
+      } catch (error) {
+        console.error('Session restoration failed', error);
+      }
+      try {
+        await restoreSettings();
+      } catch (error) {
+        console.error('Settings restoration failed', error);
+      }
+    })();
+  }, [restoreServerUrl, restoreSession, restoreSettings]);
 
   return <AppNavigator />;
 }

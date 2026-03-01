@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share, Pressable, RefreshControl } from 'react-native';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
+import { ScrollView, StyleSheet, View, Platform, Share, Pressable } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -13,6 +13,8 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
+import DismissRefreshControl from '../components/DismissRefreshControl';
+import SwipeDownDismissWrapper, { type SwipeDownDismissWrapperRef } from '../components/SwipeDownDismissWrapper';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
 import { getPrimaryArtistName } from '../utils/artistMerge';
@@ -164,6 +166,10 @@ export default function AlbumDetailScreen() {
       dismissTriggeredRef.current = false;
     }, 300);
   }, [navigation]);
+  const dismissWrapperRef = useRef<SwipeDownDismissWrapperRef>(null);
+  const triggerSwipeDismissAnimated = useCallback(() => {
+    dismissWrapperRef.current?.dismissWithAnimation();
+  }, []);
 
   const albumQueries = useQueries({
     queries: effectiveAlbumIds.map((id) => ({
@@ -347,36 +353,41 @@ export default function AlbumDetailScreen() {
 
   if (effectiveAlbumIds.length === 0) {
     return (
-      <View style={styles.container}>
-        <ScrollView
-          style={styles.scroll}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
-        >
-          <Text style={styles.muted}>No album selected.</Text>
-        </ScrollView>
-      </View>
+      <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
+        <View style={styles.container}>
+          <ScrollView
+            style={styles.scroll}
+            refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
+          >
+            <Text style={styles.muted}>No album selected.</Text>
+          </ScrollView>
+        </View>
+      </SwipeDownDismissWrapper>
     );
   }
 
   if (isLoading || !primaryAlbum) {
     return (
-      <View style={styles.container}>
-        <ScrollView
-          style={styles.scroll}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
-        >
-          <Text style={styles.muted}>Loading...</Text>
-        </ScrollView>
-      </View>
+      <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
+        <View style={styles.container}>
+          <ScrollView
+            style={styles.scroll}
+            refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
+          >
+            <Text style={styles.muted}>Loading...</Text>
+          </ScrollView>
+        </View>
+      </SwipeDownDismissWrapper>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
-      >
+    <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
+        >
         {shareFeedback ? (
           <View style={styles.shareFeedbackWrap}>
             <Text style={styles.shareFeedback}>{shareFeedback}</Text>
@@ -526,14 +537,15 @@ export default function AlbumDetailScreen() {
             )}
           </>
         )}
-      </ScrollView>
-      <ZoomableArtworkModal
-        visible={artworkModalVisible}
-        albumId={primaryAlbumId}
-        title={displayTitle}
-        onClose={() => setArtworkModalVisible(false)}
-      />
-    </View>
+        </ScrollView>
+        <ZoomableArtworkModal
+          visible={artworkModalVisible}
+          albumId={primaryAlbumId}
+          title={displayTitle}
+          onClose={() => setArtworkModalVisible(false)}
+        />
+      </View>
+    </SwipeDownDismissWrapper>
   );
 }
 

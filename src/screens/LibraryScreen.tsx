@@ -251,6 +251,12 @@ export default function LibraryScreen() {
   useEffect(() => {
     setAlbumsPerRow((current) => clampAlbumsPerRow(current || defaultAlbumsPerRow));
   }, [defaultAlbumsPerRow]);
+  // When switching to random sort, use default zoom (e.g. 3 per row on mobile) so the grid doesn't jump to a different column count
+  useEffect(() => {
+    if (tab === 'albums' && sortBy.albums === 'random') {
+      setAlbumsPerRow(defaultAlbumsPerRow);
+    }
+  }, [tab, sortBy.albums, defaultAlbumsPerRow]);
   const cardsPerRow = clampAlbumsPerRow(albumsPerRow);
   const cardsPerRowForSkeleton = Math.max(1, Math.round(cardsPerRow));
   const availableGridWidth = width - HORIZONTAL_PADDING * 2 - (albumsShowSectionIndex ? SECTION_INDEX_RESERVED_SPACE : 0);
@@ -354,6 +360,19 @@ export default function LibraryScreen() {
       return aShowsArt ? -1 : 1;
     });
   }, [albums]);
+
+  // Prefetch first batch of album artwork so grid images load faster when visible
+  const token = useAuthStore((s) => s.token);
+  useEffect(() => {
+    if (tab !== 'albums' || albumGroups.length === 0) return;
+    const toPrefetch = 20;
+    for (let i = 0; i < Math.min(toPrefetch, albumGroups.length); i++) {
+      const id = albumGroups[i].primaryAlbum.id;
+      let uri = api.getArtworkUrl('album', id);
+      if (token) uri += (uri.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+      Image.prefetch(uri).catch(() => {});
+    }
+  }, [tab, albumGroups, token]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -875,7 +894,10 @@ export default function LibraryScreen() {
           key={opt.value}
           onPress={() => {
             if (tab === 'artists') setSortBy((s) => ({ ...s, artists: opt.value }));
-            else setSortBy((s) => ({ ...s, albums: opt.value }));
+            else {
+              setSortBy((s) => ({ ...s, albums: opt.value }));
+              if (opt.value === 'random') setAlbumsPerRow(defaultAlbumsPerRow);
+            }
             setSortMenuVisible(false);
           }}
           title={opt.label}

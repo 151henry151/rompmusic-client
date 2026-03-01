@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import React, { useRef, useCallback } from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, IconButton, List, Switch } from 'react-native-paper';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
+import DismissRefreshControl from '../components/DismissRefreshControl';
+import SwipeDownDismissWrapper, { type SwipeDownDismissWrapperRef } from '../components/SwipeDownDismissWrapper';
 
 interface Props {
   onClose: () => void;
@@ -50,19 +52,24 @@ export default function PlayerScreen({ onClose }: Props) {
   if (!currentTrack) return null;
 
   const progress = duration > 0 ? position / duration : 0;
+  const dismissWrapperRef = useRef<SwipeDownDismissWrapperRef>(null);
+  const triggerDismissAnimated = useCallback(() => {
+    dismissWrapperRef.current?.dismissWithAnimation();
+  }, []);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={false} onRefresh={onClose} />}
-    >
-      <IconButton
-        icon="close"
-        onPress={onClose}
-        style={styles.close}
-        accessibilityLabel="Close player"
-      />
+    <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={onClose}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<DismissRefreshControl onRefresh={triggerDismissAnimated} />}
+      >
+        <IconButton
+          icon="arrow-left"
+          onPress={onClose}
+          style={styles.back}
+          accessibilityLabel="Back"
+        />
       <ArtworkImage
         type="album"
         id={currentTrack.album_id}
@@ -149,7 +156,8 @@ export default function PlayerScreen({ onClose }: Props) {
           ))}
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </SwipeDownDismissWrapper>
   );
 }
 
@@ -164,10 +172,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  close: {
+  back: {
     position: 'absolute',
     top: 8,
-    right: 8,
+    left: 8,
     zIndex: 1,
   },
   artwork: {

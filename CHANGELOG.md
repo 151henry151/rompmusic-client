@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.0-beta.16] - 2026-02-16
+
+### Fixed
+
+- Album details screen black on Android (SwipeDownDismissWrapper layout; outer View + absolute Animated.View so content renders)
+- Random sort now keeps 3 albums per row (set albumsPerRow when selecting Random in sort menu)
+
+### Changed
+
+- Full-page player: close control is back arrow top-left (matches album/track detail)
+- Swipe-down to dismiss animates (drag page down to reveal previous screen, then dismiss)
+- Dismiss gesture no longer shows refresh spinner (DismissRefreshControl with transparent indicator)
+- Prefetch first 20 album artwork URLs when library loads for faster grid display
+
 ## [0.1.0-beta.15] - 2026-03-16
 
 ### Changed
@@ -51,7 +65,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Library, search, and player screens
 - JWT authentication
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.15...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.16...HEAD
+[0.1.0-beta.16]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.16
 [0.1.0-beta.15]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.15
 [0.1.0-beta.14]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.14
 [0.1.0-beta.1]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.1

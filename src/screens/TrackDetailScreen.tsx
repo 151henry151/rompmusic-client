@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React from 'react';
-import { ScrollView, StyleSheet, Platform, Share, Alert, View, RefreshControl } from 'react-native';
+import React, { useRef, useCallback } from 'react';
+import { ScrollView, StyleSheet, Platform, Share, Alert, View } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -13,6 +13,8 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
+import DismissRefreshControl from '../components/DismissRefreshControl';
+import SwipeDownDismissWrapper, { type SwipeDownDismissWrapperRef } from '../components/SwipeDownDismissWrapper';
 
 type TrackDetailParams = { trackId: number };
 type RootStackParamList = {
@@ -35,7 +37,7 @@ export default function TrackDetailScreen() {
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
   const dismissTriggeredRef = React.useRef(false);
-  const triggerSwipeDismiss = React.useCallback(() => {
+  const triggerSwipeDismiss = useCallback(() => {
     if (dismissTriggeredRef.current) return;
     dismissTriggeredRef.current = true;
     navigation.goBack();
@@ -43,6 +45,10 @@ export default function TrackDetailScreen() {
       dismissTriggeredRef.current = false;
     }, 300);
   }, [navigation]);
+  const dismissWrapperRef = useRef<SwipeDownDismissWrapperRef>(null);
+  const triggerSwipeDismissAnimated = useCallback(() => {
+    dismissWrapperRef.current?.dismissWithAnimation();
+  }, []);
 
   const { data: track, isLoading } = useQuery({
     queryKey: ['track', trackId],
@@ -51,14 +57,16 @@ export default function TrackDetailScreen() {
 
   if (isLoading || !track) {
     return (
-      <View style={styles.container}>
-        <ScrollView
-          style={styles.scroll}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
-        >
-          <Text style={styles.muted}>Loading...</Text>
-        </ScrollView>
-      </View>
+      <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
+        <View style={styles.container}>
+          <ScrollView
+            style={styles.scroll}
+            refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
+          >
+            <Text style={styles.muted}>Loading...</Text>
+          </ScrollView>
+        </View>
+      </SwipeDownDismissWrapper>
     );
   }
 
@@ -120,12 +128,13 @@ export default function TrackDetailScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
-      >
+    <SwipeDownDismissWrapper ref={dismissWrapperRef} onDismiss={triggerSwipeDismiss}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismissAnimated} />}
+        >
         <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
         <Text variant="headlineSmall" style={styles.title}>
           {track.title}
@@ -154,8 +163,9 @@ export default function TrackDetailScreen() {
         <Button mode="outlined" onPress={handleShare} style={styles.albumButton} icon="share-variant">
           Share
         </Button>
-      </ScrollView>
-    </View>
+        </ScrollView>
+      </View>
+    </SwipeDownDismissWrapper>
   );
 }
 
