@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.0-beta.17] - 2026-03-01
+
+### Fixed
+
+- Album details page not loading (use RefreshControl directly instead of DismissRefreshControl wrapper; safe route.params)
+- Random sort keeps 3 albums per row (use same effective grid width as section-index view so card size and column count match)
+
 ## [0.1.0-beta.16] - 2026-02-16
 
 ### Fixed
@@ -65,7 +72,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Library, search, and player screens
 - JWT authentication
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.16...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0-beta.17...HEAD
+[0.1.0-beta.17]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.17
 [0.1.0-beta.16]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.16
 [0.1.0-beta.15]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.15
 [0.1.0-beta.14]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.14
