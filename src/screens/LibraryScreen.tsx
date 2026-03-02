@@ -25,6 +25,8 @@ const CARD_GAP = 10;
 const HORIZONTAL_PADDING = 16;
 const CARD_RADIUS = 10;
 const MOBILE_BREAKPOINT = 600;
+/** Width above which we treat as tablet and use more columns / full viewport. */
+const TABLET_BREAKPOINT = 768;
 const MIN_ALBUMS_PER_ROW = 1;
 const MAX_ALBUMS_PER_ROW = 12;
 const SECTION_INDEX_STRIP_WIDTH = 28;
@@ -236,7 +238,8 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
 
   const isMobile = width < MOBILE_BREAKPOINT;
-  const defaultAlbumsPerRow = isMobile ? 3 : 5;
+  const isTabletOrWider = width >= TABLET_BREAKPOINT;
+  const defaultAlbumsPerRow = isMobile ? 3 : isTabletOrWider ? Math.min(MAX_ALBUMS_PER_ROW, Math.max(6, Math.floor(width / 180))) : 5;
   const [albumsPerRow, setAlbumsPerRow] = useState(defaultAlbumsPerRow);
   const pinchScale = useRef(new Animated.Value(1)).current;
   const pinchStartDistanceRef = useRef<number | null>(null);
@@ -1071,7 +1074,7 @@ export default function LibraryScreen() {
   const isNarrow = windowWidth < MOBILE_BREAKPOINT;
   const headerHeight = (isNarrow ? 56 + 52 : 56) + insets.top;
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, styles.containerFullWidth]}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }, isNarrow && styles.stickyHeaderNarrow]}>
         {isNarrow ? (
           <>
@@ -1227,7 +1230,7 @@ export default function LibraryScreen() {
         )}
       </View>
 
-      <View style={[styles.scrollWrapper, { top: headerHeight }]}>
+      <View style={[styles.scrollWrapper, styles.scrollWrapperFullWidth, { top: headerHeight }]}>
         <ScrollView
           ref={setScrollViewRef}
           onScroll={handleScroll}
@@ -1237,7 +1240,7 @@ export default function LibraryScreen() {
           onTouchEnd={handleAlbumGridTouchEnd}
           onTouchCancel={handleAlbumGridTouchEnd}
           style={styles.scrollContent}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={[{ paddingBottom: 24 }, isTabletOrWider && { minWidth: width }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1475,6 +1478,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0a',
   },
+  containerFullWidth: {
+    width: '100%',
+    alignSelf: 'stretch',
+  },
   stickyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1510,6 +1517,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  scrollWrapperFullWidth: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
   scrollContent: {
     flex: 1,

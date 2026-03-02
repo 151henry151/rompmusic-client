@@ -15,6 +15,13 @@
         "credentialsSource": "local"
       }
     },
+    "preview-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "remote"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "env": {

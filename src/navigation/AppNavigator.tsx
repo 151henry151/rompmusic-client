@@ -68,7 +68,7 @@ function AuthenticatedLayout() {
       <AppStack.Navigator
         screenOptions={{
           headerShown: false,
-          contentStyle: { flex: 1 },
+          contentStyle: { flex: 1, width: '100%' },
         }}
       >
         <AppStack.Screen name="Library" component={LibraryScreen} />
