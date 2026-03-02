@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { ScrollView, StyleSheet, Platform, Share, Alert, View } from 'react-native';
+import { ScrollView, StyleSheet, Platform, Share, Alert, View, RefreshControl } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -13,7 +13,6 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
-import DismissRefreshControl from '../components/DismissRefreshControl';
 
 type TrackDetailParams = { trackId: number };
 type RootStackParamList = {
@@ -31,7 +30,7 @@ function formatDuration(seconds: number): string {
 export default function TrackDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'TrackDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'TrackDetail'>>();
-  const trackId = Number((route.params as { trackId?: number | string }).trackId) || 0;
+  const trackId = Number((route.params ?? {}).trackId) || 0;
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
@@ -54,7 +53,7 @@ export default function TrackDetailScreen() {
       <View style={styles.container}>
         <ScrollView
           style={styles.scroll}
-          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
         >
           <Text style={styles.muted}>Loading...</Text>
         </ScrollView>
@@ -124,7 +123,7 @@ export default function TrackDetailScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
       >
         <ArtworkImage type="album" id={track.album_id} size={200} style={styles.artwork} />
         <Text variant="headlineSmall" style={styles.title}>

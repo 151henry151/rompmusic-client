@@ -262,7 +262,10 @@ export default function LibraryScreen() {
       ? Math.max(clampAlbumsPerRow(albumsPerRow), defaultAlbumsPerRow)
       : clampAlbumsPerRow(albumsPerRow);
   const cardsPerRowForSkeleton = Math.max(1, Math.round(cardsPerRow));
-  const availableGridWidth = width - HORIZONTAL_PADDING * 2 - (albumsShowSectionIndex ? SECTION_INDEX_RESERVED_SPACE : 0);
+  // Use same effective width for random as when section index is shown, so we get 3 per row and consistent card size (no jump to 2 per row)
+  const effectiveSectionIndexReserve =
+    tab === 'albums' && (albumsShowSectionIndex || sortBy.albums === 'random') ? SECTION_INDEX_RESERVED_SPACE : 0;
+  const availableGridWidth = width - HORIZONTAL_PADDING * 2 - effectiveSectionIndexReserve;
   const cardWidth = Math.max(20, (availableGridWidth - CARD_GAP * (cardsPerRow - 1)) / cardsPerRow);
 
   const currentSortBy = tab === 'artists' ? sortBy.artists : sortBy.albums;

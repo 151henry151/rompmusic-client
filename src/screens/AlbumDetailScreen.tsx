@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useCallback, useRef } from 'react';
-import { ScrollView, StyleSheet, View, Platform, Share, Pressable } from 'react-native';
+import { ScrollView, StyleSheet, View, Platform, Share, Pressable, RefreshControl } from 'react-native';
 import { Text, List, IconButton, Button, Menu } from 'react-native-paper';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -13,7 +13,6 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
-import DismissRefreshControl from '../components/DismissRefreshControl';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
 import { getPrimaryArtistName } from '../utils/artistMerge';
@@ -86,7 +85,7 @@ function TrackRow({
 export default function AlbumDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'AlbumDetail'>>();
-  const { albumId, albumIds, highlightTrackId } = route.params;
+  const { albumId, albumIds, highlightTrackId } = route.params ?? {};
   // Normalize to unique numbers (URL may give string; avoid duplicate ids from any source).
   const routeAlbumIds = useMemo(() => {
     const raw = albumIds ?? (albumId != null ? [albumId] : []);
@@ -350,7 +349,7 @@ export default function AlbumDetailScreen() {
       <View style={styles.container}>
         <ScrollView
           style={styles.scroll}
-          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
         >
           <Text style={styles.muted}>No album selected.</Text>
         </ScrollView>
@@ -363,7 +362,7 @@ export default function AlbumDetailScreen() {
       <View style={styles.container}>
         <ScrollView
           style={styles.scroll}
-          refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
         >
           <Text style={styles.muted}>Loading...</Text>
         </ScrollView>
@@ -375,7 +374,7 @@ export default function AlbumDetailScreen() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        refreshControl={<DismissRefreshControl onRefresh={triggerSwipeDismiss} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={triggerSwipeDismiss} />}
       >
         {shareFeedback ? (
           <View style={styles.shareFeedbackWrap}>

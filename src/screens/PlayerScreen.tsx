@@ -4,13 +4,12 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, IconButton, List, Switch } from 'react-native-paper';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import type { Track } from '../store/playerStore';
-import DismissRefreshControl from '../components/DismissRefreshControl';
 
 interface Props {
   onClose: () => void;
@@ -56,7 +55,7 @@ export default function PlayerScreen({ onClose }: Props) {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<DismissRefreshControl onRefresh={onClose} />}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={onClose} />}
     >
         <IconButton
           icon="arrow-left"
