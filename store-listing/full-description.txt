@@ -1,0 +1,19 @@
+RompMusic is a libre (free as in freedom) and gratis (free as in beer) music streaming app. Connect to your own RompMusic server and stream your music with full control over your data—no subscriptions, no tracking, no lock-in.
+
+FEATURES
+
+• Self-hosted — Your music stays on your server. You own your library and your privacy.
+• Gapless playback — Albums play seamlessly with no gaps between tracks, the way they were meant to be heard.
+• Cross-platform — Same app on Android, iOS, and web. One account, one library, everywhere.
+• Library & search — Browse artists, albums, and tracks. Search across your whole collection.
+• Play history — Your listening history syncs with your server so you can pick up where you left off.
+• Beautiful player — Now playing screen with artwork, queue management, and simple controls.
+• Free software — RompMusic is licensed under GPL-3.0. Use, study, modify, and share.
+
+HOW IT WORKS
+
+RompMusic has two parts: a server you run (on your own hardware or a VPS) and this app. Install the RompMusic server, add your music, then point this app at your server’s URL. No cloud middleman—you stream directly from your own library.
+
+No telemetry, no ads, no proprietary services. Your music. Your server. Your freedom.
+
+Learn more and get the server: rompmusic.com
