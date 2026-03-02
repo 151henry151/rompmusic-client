@@ -3,7 +3,6 @@ RompMusic is a libre (free as in freedom) and gratis (free as in beer) music str
 FEATURES
 
 • Self-hosted — Your music stays on your server. You own your library and your privacy.
-• Gapless playback — Albums play seamlessly with no gaps between tracks, the way they were meant to be heard.
 • Cross-platform — Same app on Android, iOS, and web. One account, one library, everywhere.
 • Library & search — Browse artists, albums, and tracks. Search across your whole collection.
 • Play history — Your listening history syncs with your server so you can pick up where you left off.
