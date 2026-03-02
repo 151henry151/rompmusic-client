@@ -29,8 +29,8 @@ function getStreamFormat(): 'original' | 'ogg' {
 
 /** Start prestarting (play next at volume 0) this many seconds before end so it has time to load. Load time can be ~12s with transcoding or slow networks. */
 const PRESTART_BEFORE_END_SEC = 15;
-/** Consider track ended and promote next this many seconds before actual end (short overlap for gapless). */
-const PROMOTE_BEFORE_END_SEC = 0.02;
+/** Consider track ended and promote next this many seconds before actual end (short overlap for gapless). Widen slightly so we advance even if the last status update is slightly before true end (fixes Android not advancing). */
+const PROMOTE_BEFORE_END_SEC = 0.5;
 
 export interface Track {
   id: number;
@@ -177,13 +177,21 @@ function loadAndPlay(
   let finished = false;
   let startedNotified = false;
   let lastObservedPos = position;
+  let endFallbackTimeout: ReturnType<typeof setTimeout> | null = null;
+  const clearEndFallback = () => {
+    if (endFallbackTimeout != null) {
+      clearTimeout(endFallbackTimeout);
+      endFallbackTimeout = null;
+    }
+  };
   player.addListener('playbackStatusUpdate', (status) => {
     onPositionUpdate(status.currentTime);
     if (onPlaybackStarted && !startedNotified && (status.isLoaded || (status.currentTime ?? 0) > 0)) {
       startedNotified = true;
       onPlaybackStarted();
     }
-    const dur = status.duration ?? 0;
+    const reportedDur = status.duration ?? 0;
+    const dur = reportedDur > 0 ? reportedDur : track.duration ?? 0;
     const pos = status.currentTime ?? 0;
     if (Platform.OS !== 'web') {
       const delta = pos - lastObservedPos;
@@ -195,12 +203,24 @@ function loadAndPlay(
       nextSound.volume = 0;
       nextSound.play();
     }
-    const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
+    const atEnd = (status.isLoaded || pos > 0) && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
     if (!finished && (status.didJustFinish || atEnd)) {
       finished = true;
+      clearEndFallback();
       onFinish();
     }
   });
+  // Fallback: if status updates stop before end (e.g. on some native streams), advance once we're past 95% of duration
+  const fallbackMs = Math.max(0, (track.duration ?? 0) * 0.95 * 1000);
+  if (fallbackMs > 0) {
+    endFallbackTimeout = setTimeout(() => {
+      endFallbackTimeout = null;
+      if (!finished) {
+        finished = true;
+        onFinish();
+      }
+    }, fallbackMs);
+  }
   player.play();
   return player;
 }
@@ -378,7 +398,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const nextIndex = ci + 1;
     const nextTrack = q[nextIndex];
     const preloaded = nextSound;
-    if (preloaded) {
+    // On Android, avoid reusing the preloaded player when advancing: it can play the previous track's URL (wrong-audio bug). Always load next track fresh on Android.
+    const usePreloaded = preloaded && Platform.OS !== 'android';
+    if (usePreloaded) {
       nextSound = null;
       prestartedNext = false;
       removePlayer(sound);
@@ -390,7 +412,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       let lastObservedPos = 0;
       sound.addListener('playbackStatusUpdate', (status) => {
         set({ position: status.currentTime });
-        const dur = status.duration ?? 0;
+        const reportedDur = status.duration ?? 0;
+        const dur = reportedDur > 0 ? reportedDur : nextTrack.duration ?? 0;
         const pos = status.currentTime ?? 0;
         if (Platform.OS !== 'web') {
           const delta = pos - lastObservedPos;
@@ -402,7 +425,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           nextSound.volume = 0;
           nextSound.play();
         }
-        const atEnd = status.isLoaded && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
+        const atEnd = (status.isLoaded || pos > 0) && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
         if (!finished && (status.didJustFinish || atEnd)) {
           finished = true;
           get().skipToNext();
@@ -415,6 +438,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
       if (nextNext) nextSound = preloadNext(nextNext);
     } else {
+      if (preloaded) {
+        removePlayer(preloaded);
+        nextSound = null;
+      }
       prestartedNext = false;
       removePlayer(sound);
       sound = loadAndPlay(nextTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
