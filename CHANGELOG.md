@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.4] - 2026-02-14
+
+### Fixed
+
+- "Play album" no longer shows "undefined is not a function" and music plays: guard native-queue path with setQueue availability check and try/catch; fall back to single-track path so playback always works. Native setQueue now accepts a JSON string (avoids List conversion issues in the bridge).
+
 ## [0.1.3] - 2026-02-14
 
 ### Added
@@ -112,7 +118,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Library, search, and player screens
 - JWT authentication
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.4
 [0.1.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.3
 [0.1.2]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.2
 [0.1.1]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.1

@@ -376,26 +376,42 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ isLoading: false });
       } else if (Platform.OS === 'android' && queue.length > 1) {
         // Native queue: ExoPlayer advances to next track when current ends, even when device is locked.
-        stopAndRemoveAllPlayers();
-        useNativeQueueAndroid = true;
-        sound = createAudioPlayer(null, { updateInterval: 150, downloadFirst: false });
-        activePlayers.add(sound);
-        const urls = queue.map((t) => getStreamUrl(t));
-        (sound as unknown as { setQueue: (uris: string[], startIndex: number) => void }).setQueue(urls, currentIndex);
-        const q = queue;
-        sound.addListener('playbackStatusUpdate', (status: { currentMediaItemIndex?: number; currentTime?: number; duration?: number }) => {
-          onPosition(status.currentTime ?? 0);
-          const idx = status.currentMediaItemIndex;
-          if (idx !== undefined && idx >= 0 && idx < q.length && idx !== get().currentIndex) {
-            const track = q[idx];
-            set({ currentIndex: idx, currentTrack: track, position: 0, duration: track.duration ?? 0 });
-            setLockScreenMetadata(sound, track);
+        // If setQueue/addListener aren't available (e.g. patch not applied or method not exposed to JS), fall back to single-track path.
+        try {
+          stopAndRemoveAllPlayers();
+          useNativeQueueAndroid = true;
+          sound = createAudioPlayer(null, { updateInterval: 150, downloadFirst: false });
+          const urls = queue.map((t) => getStreamUrl(t));
+          const setQueueFn = (sound as unknown as { setQueue?: (urisJson: string, startIndex: number) => void }).setQueue;
+          if (typeof setQueueFn !== 'function') throw new Error('setQueue not available');
+          setQueueFn.call(sound, JSON.stringify(urls), currentIndex);
+          activePlayers.add(sound);
+          const q = queue;
+          sound.addListener('playbackStatusUpdate', (status: { currentMediaItemIndex?: number; currentTime?: number; duration?: number }) => {
+            onPosition(status.currentTime ?? 0);
+            const idx = status.currentMediaItemIndex;
+            if (idx !== undefined && idx >= 0 && idx < q.length && idx !== get().currentIndex) {
+              const track = q[idx];
+              set({ currentIndex: idx, currentTrack: track, position: 0, duration: track.duration ?? 0 });
+              setLockScreenMetadata(sound, track);
+            }
+          });
+          sound.volume = currentVolume;
+          setLockScreenMetadata(sound, currentTrack);
+          sound.play();
+          set({ isLoading: false });
+        } catch (e) {
+          if (sound) {
+            removePlayer(sound);
+            sound = null;
           }
-        });
-        sound.volume = currentVolume;
-        setLockScreenMetadata(sound, currentTrack);
-        sound.play();
-        set({ isLoading: false });
+          useNativeQueueAndroid = false;
+          const nextIndex = currentIndex + 1;
+          const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
+          sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
+          setLockScreenMetadata(sound, currentTrack);
+          if (nextTrack) nextSound = preloadNext(nextTrack);
+        }
       } else {
         const nextIndex = currentIndex + 1;
         const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;

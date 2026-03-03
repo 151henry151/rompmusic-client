@@ -6,9 +6,14 @@ index 49a53af..5475ff7 100644
          }
        }
  
-+      Function("setQueue") { player: AudioPlayer, uris: List<String>, startIndex: Int ->
++      Function("setQueue") { player: AudioPlayer, urisJson: String, startIndex: Int ->
 +        runOnMain {
-+          player.setMediaQueue(uris, startIndex)
++          val uris = try {
++            org.json.JSONArray(urisJson).let { arr -> (0 until arr.length()).map { arr.getString(it) } }
++          } catch (_: Exception) {
++            emptyList()
++          }
++          if (uris.isNotEmpty()) player.setMediaQueue(uris, startIndex)
 +        }
 +      }
 +
