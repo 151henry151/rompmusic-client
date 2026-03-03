@@ -31,6 +31,8 @@ function getStreamFormat(): 'original' | 'ogg' {
 const PRESTART_BEFORE_END_SEC = 15;
 /** Consider track ended and promote next this many seconds before actual end (short overlap for gapless). Widen slightly so we advance even if the last status update is slightly before true end (fixes Android not advancing). */
 const PROMOTE_BEFORE_END_SEC = 0.5;
+/** When track duration is 0 or unknown (e.g. stream), use this as fallback so we still advance. */
+const UNKNOWN_DURATION_FALLBACK_SEC = 600;
 
 export interface Track {
   id: number;
@@ -70,12 +72,43 @@ interface PlayerState {
   setAutoplay: (enabled: boolean) => void;
   /** First queue index that was added by autoplay (similar tracks). null = no autoplay segment. */
   autoplayStartIndex: number | null;
+  /** Call when app goes to background (screen off). Enables catch-up when app returns. */
+  onAppBackground: () => void;
+  /** Call when app becomes active. Advances to correct track if we missed end while backgrounded. */
+  onAppActive: () => void;
 }
 
 let sound: AudioPlayer | null = null;
 let nextSound: AudioPlayer | null = null;
 /** True after we've prestarted nextSound (play at volume 0); reset when we promote. */
 let prestartedNext = false;
+/** On Android, when true we use native ExoPlayer queue (setQueue) so next track plays while device is locked. */
+let useNativeQueueAndroid = false;
+/** When app went to background (screen off). Used to catch up and advance tracks on resume. */
+let backgroundedAt: number | null = null;
+let positionAtBackground = 0;
+let durationAtBackground = 0;
+/** Time-based advance: fires when current track would end so next track starts even if app is backgrounded (JS callbacks throttled). */
+let scheduledAdvanceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function clearScheduledAdvance(): void {
+  if (scheduledAdvanceTimeoutId != null) {
+    clearTimeout(scheduledAdvanceTimeoutId);
+    scheduledAdvanceTimeoutId = null;
+  }
+}
+
+/** Schedule advancing to next track after remainingMs. Only invokes onAdvance if currentTrack.id still matches (avoids double-advance). */
+function scheduleAdvance(remainingMs: number, trackId: number, onAdvance: () => void): void {
+  clearScheduledAdvance();
+  if (remainingMs <= 0 || Platform.OS === 'web') return;
+  scheduledAdvanceTimeoutId = setTimeout(() => {
+    scheduledAdvanceTimeoutId = null;
+    const state = usePlayerStore.getState();
+    if (state.currentTrack?.id === trackId) onAdvance();
+  }, remainingMs);
+}
+
 /** All active players so we can stop every one before starting new playback (avoids multiple tracks playing). */
 const activePlayers = new Set<AudioPlayer>();
 let suppressRemoteSkipDetectionUntil = 0;
@@ -98,6 +131,8 @@ function stopAndRemoveAllPlayers(): void {
   sound = null;
   nextSound = null;
   prestartedNext = false;
+  useNativeQueueAndroid = false;
+  clearScheduledAdvance();
 }
 
 function removePlayer(p: AudioPlayer | null): void {
@@ -207,19 +242,34 @@ function loadAndPlay(
     if (!finished && (status.didJustFinish || atEnd)) {
       finished = true;
       clearEndFallback();
-      onFinish();
+      clearScheduledAdvance();
+      if (sound === player) onFinish();
     }
   });
   // Fallback: if status updates stop before end (e.g. on some native streams), advance once we're past 95% of duration
-  const fallbackMs = Math.max(0, (track.duration ?? 0) * 0.95 * 1000);
+  const effectiveDuration = (track.duration ?? 0) > 0 ? (track.duration ?? 0) : UNKNOWN_DURATION_FALLBACK_SEC;
+  const fallbackMs = Math.max(0, effectiveDuration * 0.95 * 1000);
   if (fallbackMs > 0) {
     endFallbackTimeout = setTimeout(() => {
       endFallbackTimeout = null;
-      if (!finished) {
+      if (!finished && sound === player) {
         finished = true;
+        clearScheduledAdvance();
         onFinish();
       }
     }, fallbackMs);
+  }
+  // Time-based advance: when device is locked, JS status updates are throttled. Schedule advance at track end so next track starts in background.
+  const trackDur = (track.duration ?? 0) > 0 ? (track.duration ?? 0) : UNKNOWN_DURATION_FALLBACK_SEC;
+  const remainingMs = trackDur > 0 && position < trackDur ? (trackDur - position) * 1000 : 0;
+  if (remainingMs > 0) {
+    scheduleAdvance(remainingMs, track.id, () => {
+      if (!finished && sound === player) {
+        finished = true;
+        clearEndFallback();
+        onFinish();
+      }
+    });
   }
   player.play();
   return player;
@@ -310,6 +360,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0) => {
+    if (Platform.OS === 'android' && tracks.length <= 1) useNativeQueueAndroid = false;
     set({ queue: tracks, currentIndex: startIndex, autoplayStartIndex: null });
   },
 
@@ -321,6 +372,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const onPlaybackStarted = () => set({ isLoading: false });
     try {
       if (sound) {
+        sound.play();
+        set({ isLoading: false });
+      } else if (Platform.OS === 'android' && queue.length > 1) {
+        // Native queue: ExoPlayer advances to next track when current ends, even when device is locked.
+        stopAndRemoveAllPlayers();
+        useNativeQueueAndroid = true;
+        sound = createAudioPlayer(null, { updateInterval: 150, downloadFirst: false });
+        activePlayers.add(sound);
+        const urls = queue.map((t) => getStreamUrl(t));
+        (sound as unknown as { setQueue: (uris: string[], startIndex: number) => void }).setQueue(urls, currentIndex);
+        const q = queue;
+        sound.addListener('playbackStatusUpdate', (status: { currentMediaItemIndex?: number; currentTime?: number; duration?: number }) => {
+          onPosition(status.currentTime ?? 0);
+          const idx = status.currentMediaItemIndex;
+          if (idx !== undefined && idx >= 0 && idx < q.length && idx !== get().currentIndex) {
+            const track = q[idx];
+            set({ currentIndex: idx, currentTrack: track, position: 0, duration: track.duration ?? 0 });
+            setLockScreenMetadata(sound, track);
+          }
+        });
+        sound.volume = currentVolume;
+        setLockScreenMetadata(sound, currentTrack);
         sound.play();
         set({ isLoading: false });
       } else {
@@ -340,6 +413,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   pause: async () => {
+    clearScheduledAdvance();
     if (sound) {
       set({ position: sound.currentTime });
       sound.pause();
@@ -349,15 +423,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   seekTo: async (seconds: number) => {
     if (sound) {
+      clearScheduledAdvance();
       suppressRemoteSkipDetectionUntil = Date.now() + 1600;
       await sound.seekTo(seconds);
       set({ position: seconds });
+      const { currentTrack, duration } = get();
+      if (currentTrack && duration > 0 && seconds < duration) {
+        const remainingMs = (duration - seconds) * 1000;
+        if (remainingMs > 0) scheduleAdvance(remainingMs, currentTrack.id, () => get().skipToNext());
+      }
     }
   },
 
   skipToNext: async () => {
+    clearScheduledAdvance();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
+    if (useNativeQueueAndroid && sound && currentIndex + 1 < queue.length) {
+      const nextIndex = currentIndex + 1;
+      (sound as unknown as { seekToMediaItem: (index: number) => void }).seekToMediaItem(nextIndex);
+      const nextTrack = queue[nextIndex];
+      set({ currentIndex: nextIndex, currentTrack: nextTrack, position: 0, duration: nextTrack.duration ?? 0 });
+      setLockScreenMetadata(sound, nextTrack);
+      return;
+    }
     if (currentIndex + 1 >= queue.length) {
       if (autoplayEnabled && currentTrack) {
         try {
@@ -390,6 +479,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         sound = null;
         nextSound = null;
         prestartedNext = false;
+        useNativeQueueAndroid = false;
         set({ isPlaying: false, currentTrack: null });
         return;
       }
@@ -428,13 +518,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const atEnd = (status.isLoaded || pos > 0) && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
         if (!finished && (status.didJustFinish || atEnd)) {
           finished = true;
-          get().skipToNext();
+          clearScheduledAdvance();
+          if (sound === preloaded) get().skipToNext();
         }
       });
       if (!(sound as { currentStatus?: { playing?: boolean } }).currentStatus?.playing) {
         playNowOrWhenLoaded(sound);
       }
       setLockScreenMetadata(sound, nextTrack);
+      const dur = nextTrack.duration ?? 0;
+      if (dur > 0) scheduleAdvance(dur * 1000, nextTrack.id, () => get().skipToNext());
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
       if (nextNext) nextSound = preloadNext(nextNext);
     } else {
@@ -453,6 +546,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   skipToPrevious: async () => {
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     const { position, queue, currentIndex } = get();
+    if (useNativeQueueAndroid && sound && currentIndex > 0) {
+      const prevIndex = currentIndex - 1;
+      (sound as unknown as { seekToMediaItem: (index: number) => void }).seekToMediaItem(prevIndex);
+      const prevTrack = queue[prevIndex];
+      set({ currentIndex: prevIndex, currentTrack: prevTrack, position: 0, duration: prevTrack.duration ?? 0 });
+      setLockScreenMetadata(sound, prevTrack);
+      return;
+    }
     if (position > 3 && sound) {
       sound.seekTo(0);
       set({ position: 0 });
@@ -533,5 +634,48 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         /* ignore */
       }
     })();
+  },
+
+  onAppBackground: () => {
+    const { isPlaying, position, duration, currentTrack } = get();
+    if (Platform.OS === 'web') return;
+    if (isPlaying && currentTrack && duration > 0) {
+      backgroundedAt = Date.now();
+      positionAtBackground = position;
+      durationAtBackground = duration;
+    }
+  },
+
+  onAppActive: async () => {
+    if (Platform.OS === 'web') return;
+    // Catch-up: if we were backgrounded and track(s) would have ended, advance to correct track
+    if (backgroundedAt != null) {
+      const elapsedMs = Date.now() - backgroundedAt;
+      backgroundedAt = null;
+      let remainingSec = Math.max(0, durationAtBackground - positionAtBackground);
+      if (remainingSec >= 2 && elapsedMs >= (remainingSec + 1) * 1000) {
+        let elapsedSec = elapsedMs / 1000;
+        while (elapsedSec >= remainingSec) {
+          const state = get();
+          if (!state.currentTrack || state.currentIndex + 1 >= state.queue.length) break;
+          await get().skipToNext();
+          elapsedSec -= remainingSec;
+          const next = get();
+          remainingSec = next.duration ?? 0;
+          if (remainingSec <= 0) break;
+        }
+      }
+    }
+    // When app comes to foreground, check actual player state: if current track has ended
+    // (e.g. we missed the status callback while backgrounded), advance so playback continues.
+    const state = get();
+    if (sound && state.currentTrack && state.currentIndex + 1 < state.queue.length) {
+      const pos = sound.currentTime ?? 0;
+      const dur = state.duration ?? sound.duration ?? 0;
+      const status = (sound as { currentStatus?: { didJustFinish?: boolean } }).currentStatus;
+      if (dur > 0 && (pos >= Math.max(0, dur - 0.5) || status?.didJustFinish)) {
+        await get().skipToNext();
+      }
+    }
   },
 }));

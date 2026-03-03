@@ -1,3 +1,69 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+index 49a53af..5475ff7 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -422,6 +422,18 @@ class AudioModule : Module() {
+         }
+       }
+ 
++      Function("setQueue") { player: AudioPlayer, uris: List<String>, startIndex: Int ->
++        runOnMain {
++          player.setMediaQueue(uris, startIndex)
++        }
++      }
++
++      Function("seekToMediaItem") { player: AudioPlayer, index: Int ->
++        runOnMain {
++          player.seekToMediaItem(index)
++        }
++      }
++
+       Function("setActiveForLockScreen") { ref: AudioPlayer, active: Boolean, metadata: Metadata?, options: AudioLockScreenOptions? ->
+         runOnMain {
+           ref.setActiveForLockScreen(active, metadata, options)
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+index 320062e..cfa8906 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+@@ -1,5 +1,6 @@
+ package expo.modules.audio
+ 
++import android.net.Uri
+ import android.Manifest
+ import android.content.Context
+ import android.content.pm.PackageManager
+@@ -100,6 +101,23 @@ class AudioPlayer(
+     startUpdating()
+   }
+ 
++  /** Set a queue of URIs; ExoPlayer will advance to the next track when current ends (works when app is backgrounded). */
++  fun setMediaQueue(uris: List<String>, startIndex: Int) {
++    val items = uris.map { MediaItem.fromUri(Uri.parse(it)) }
++    if (items.isEmpty()) return
++    val start = startIndex.coerceIn(0, items.size - 1)
++    ref.setMediaItems(items, start, 0L)
++    ref.prepare()
++    startUpdating()
++  }
++
++  /** Seek to a specific item in the queue by index. */
++  fun seekToMediaItem(index: Int) {
++    if (index in 0 until ref.mediaItemCount) {
++      ref.seekTo(index, 0L)
++    }
++  }
++
+   fun setActiveForLockScreen(active: Boolean, metadata: Metadata? = null, options: AudioLockScreenOptions? = null) {
+     if (active) {
+       this.metadata = metadata
+@@ -207,6 +225,7 @@ class AudioPlayer(
+     return mapOf(
+       "id" to id,
+       "currentTime" to currentTime,
++      "currentMediaItemIndex" to ref.currentMediaItemIndex,
+       "playbackState" to playbackStateToString(ref.playbackState),
+       "timeControlStatus" to if (ref.isPlaying) "playing" else "paused",
+       "reasonForWaitingToPlay" to null,
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 index 04486e2..3ea81cf 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt

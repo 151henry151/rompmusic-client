@@ -7,15 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (Changes since last release will be listed here)
+
+## [0.1.3] - 2026-02-14
+
+### Added
+
+- **Android: native queue** — When playing an album, the app uses ExoPlayer’s native queue (`setMediaItems`). The next track starts when the current one ends even when the device is locked or the app is in the background (no reliance on JS timers or callbacks).
+
 ### Fixed
 
+- Playback no longer stops after the first track when the device has been idle or the screen is off; native queue advances in the background.
+
+## [0.1.2] - 2026-02-14
+
+### Fixed
+
+- Album playback: when app returns from background, check actual player position and advance to next track if current track has ended (fixes playback stopping after first track when device was idle/screen off)
+- Avoid advancing to next track on every unlock when track was not at end (stricter catch-up: only when remaining ≥ 2s and elapsed ≥ 1s past expected end)
+- Unknown/zero duration: use 10‑minute fallback so advance-at-end and 95% fallback still run for streams without duration
+
+## [0.1.1] - 2026-02-14
+
+### Fixed
+
+- Next track now starts when device is locked or screen off: time-based scheduled advance so playback continues in background; catch-up on app resume if timer was delayed
 - Album playback: advance to next track reliably at end of track (wider end threshold + fallback timer; fixes playback stopping on e.g. "Full and Away")
 - Play album on Android: second track no longer plays first track’s audio (advance by loading next track fresh instead of reusing preloaded player)
 - Android release target: set Expo Android build properties to compile/target API 35 so Google Play closed testing accepts new builds
 
 ### Added
 
-- (Changes since last release will be listed here)
+- expo-audio background playback plugin and WAKE_LOCK for sustained playback when app is in background
+- AppState-based background/active handling to advance queue when returning to app after screen-off
 
 ## [0.1.0] - 2026-02-14
 
@@ -86,7 +112,10 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Library, search, and player screens
 - JWT authentication
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.3
+[0.1.2]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.2
+[0.1.1]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.1
 [0.1.0]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0
 [0.1.0-beta.17]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.17
 [0.1.0-beta.16]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.0-beta.16
