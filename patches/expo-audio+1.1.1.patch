@@ -2,7 +2,7 @@ diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/Au
 index 49a53af..5475ff7 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
-@@ -422,6 +422,18 @@ class AudioModule : Module() {
+@@ -422,6 +422,23 @@ class AudioModule : Module() {
          }
        }
  
