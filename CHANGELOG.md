@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+## [0.1.5] - 2026-03-04
+
+### Fixed
+
+- Correct the `expo-audio` patch hunk header length so `patch-package` can parse and apply Android native queue bridge methods during install.
+
+### Added
+
+- Add an `eas-build-post-install` script that runs `patch-package` during EAS cloud builds.
+
+### Changed
+
+- Set release metadata to version `0.1.5` and increment Android `versionCode` to `3`.
+
 ## [0.1.4] - 2026-02-14
 
 ### Fixed
@@ -118,7 +132,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Add Library, Search, and Player screens.
 - Add JWT authentication.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.5
 [0.1.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.4
 [0.1.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.3
 [0.1.2]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.2
