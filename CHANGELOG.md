@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Increment `expo.android.versionCode` from `2` to `3` for production Android build metadata.
 
+### Fixed
+
+- Normalize search queries by trimming and collapsing internal whitespace before sending `/search` requests.
+
 ## [0.1.5] - 2026-03-05
 
 ### Changed

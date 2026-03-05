@@ -215,7 +215,11 @@ export const api = {
   },
 
   async search(q: string, limit = 20) {
-    return fetchApi(`/search?q=${encodeURIComponent(q)}&limit=${Math.min(50, Math.max(1, limit))}`);
+    const normalized = q.trim().replace(/\s+/g, ' ');
+    if (!normalized) {
+      return { artists: [], albums: [], tracks: [] };
+    }
+    return fetchApi(`/search?q=${encodeURIComponent(normalized)}&limit=${Math.min(50, Math.max(1, limit))}`);
   },
 
   async getPlaylists() {
