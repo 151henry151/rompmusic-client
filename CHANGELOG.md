@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (Changes since last release will be listed here)
+
+## [0.1.6] - 2026-03-05
+
 ### Changed
 
 - Increment `expo.android.versionCode` from `2` to `3` for production Android build metadata.
@@ -134,7 +140,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Add Library, Search, and Player screens.
 - Add JWT authentication.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.6
 [0.1.5]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.5
 [0.1.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.4
 [0.1.3]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.3
