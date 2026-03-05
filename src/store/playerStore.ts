@@ -122,6 +122,7 @@ function scheduleAdvance(remainingMs: number, trackId: number, onAdvance: () => 
 const activePlayers = new Set<AudioPlayer>();
 let suppressRemoteSkipDetectionUntil = 0;
 let remoteSkipInFlight = false;
+let onAppActiveInFlight = false;
 
 function trySetAndroidNativeQueue(player: AudioPlayer, urls: string[], startIndex: number): boolean {
   const setQueueFn = (
@@ -153,6 +154,28 @@ function trySeekToAndroidNativeQueueIndex(player: AudioPlayer, index: number): b
   } catch {
     return false;
   }
+}
+
+function syncFromAndroidNativeQueueStatus(): boolean {
+  if (!useNativeQueueAndroid || !sound) return false;
+  const state = usePlayerStore.getState();
+  const status = (sound as unknown as {
+    currentStatus?: { currentMediaItemIndex?: number; currentTime?: number; duration?: number };
+  }).currentStatus;
+  const idx = status?.currentMediaItemIndex;
+  if (typeof idx !== 'number' || idx < 0 || idx >= state.queue.length) return false;
+  const track = state.queue[idx];
+  const pos = status?.currentTime ?? sound.currentTime ?? 0;
+  const statusDur = status?.duration ?? 0;
+  const dur = statusDur > 0 ? statusDur : (track.duration ?? 0);
+  setLockScreenMetadata(sound, track);
+  usePlayerStore.setState({
+    currentIndex: idx,
+    currentTrack: track,
+    position: pos,
+    duration: dur,
+  });
+  return true;
 }
 
 function stopAndRemoveAllPlayers(): void {
@@ -422,7 +445,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       } else if (Platform.OS === 'android' && queue.length > 1) {
         // Native queue: ExoPlayer advances to next track when current ends, even when device is locked.
         // If setQueue/addListener aren't available (e.g. patch not applied or method not exposed to JS), fall back to single-track path.
-        let nativeQueueStarted = false;
         try {
           stopAndRemoveAllPlayers();
           sound = createAudioPlayer(getStreamUrl(currentTrack), { updateInterval: 150, downloadFirst: false });
@@ -442,11 +464,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           });
           sound.volume = currentVolume;
           setLockScreenMetadata(sound, currentTrack);
-          sound.play();
-          nativeQueueStarted = true;
+          playNowOrWhenLoaded(sound);
           set({ isLoading: false });
         } catch (e) {
-          if (!nativeQueueStarted && sound) {
+          if (sound) {
             removePlayer(sound);
             sound = null;
           }
@@ -705,43 +726,56 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   onAppBackground: () => {
     const { isPlaying, position, duration, currentTrack } = get();
     if (Platform.OS === 'web') return;
-    if (isPlaying && currentTrack && duration > 0) {
+    if (useNativeQueueAndroid) {
+      backgroundedAt = null;
+      return;
+    }
+    const livePosition = sound?.currentTime ?? position;
+    const liveDuration = sound?.duration ?? duration;
+    if (isPlaying && currentTrack && liveDuration > 0) {
       backgroundedAt = Date.now();
-      positionAtBackground = position;
-      durationAtBackground = duration;
+      positionAtBackground = livePosition;
+      durationAtBackground = liveDuration;
     }
   },
 
   onAppActive: async () => {
     if (Platform.OS === 'web') return;
-    // Catch-up: if we were backgrounded and track(s) would have ended, advance to correct track
-    if (backgroundedAt != null) {
-      const elapsedMs = Date.now() - backgroundedAt;
-      backgroundedAt = null;
-      let remainingSec = Math.max(0, durationAtBackground - positionAtBackground);
-      if (remainingSec >= 2 && elapsedMs >= (remainingSec + 1) * 1000) {
-        let elapsedSec = elapsedMs / 1000;
-        while (elapsedSec >= remainingSec) {
+    if (onAppActiveInFlight) return;
+    onAppActiveInFlight = true;
+    try {
+      // Native queue path: sync from current media item and do not run JS elapsed catch-up.
+      if (useNativeQueueAndroid && sound) {
+        syncFromAndroidNativeQueueStatus();
+        backgroundedAt = null;
+        return;
+      }
+      // Catch-up: if we were backgrounded and track(s) would have ended, advance to correct track
+      if (backgroundedAt != null) {
+        const elapsedMs = Date.now() - backgroundedAt;
+        backgroundedAt = null;
+        const remainingSec = Math.max(0, durationAtBackground - positionAtBackground);
+        // Conservative fallback: advance at most one track on resume.
+        if (remainingSec >= 2 && elapsedMs >= (remainingSec + 1) * 1000) {
           const state = get();
-          if (!state.currentTrack || state.currentIndex + 1 >= state.queue.length) break;
-          await get().skipToNext();
-          elapsedSec -= remainingSec;
-          const next = get();
-          remainingSec = next.duration ?? 0;
-          if (remainingSec <= 0) break;
+          if (state.currentTrack && state.currentIndex + 1 < state.queue.length) {
+            await get().skipToNext();
+          }
         }
       }
-    }
-    // When app comes to foreground, check actual player state: if current track has ended
-    // (e.g. we missed the status callback while backgrounded), advance so playback continues.
-    const state = get();
-    if (sound && state.currentTrack && state.currentIndex + 1 < state.queue.length) {
-      const pos = sound.currentTime ?? 0;
-      const dur = state.duration ?? sound.duration ?? 0;
-      const status = (sound as { currentStatus?: { didJustFinish?: boolean } }).currentStatus;
-      if (dur > 0 && (pos >= Math.max(0, dur - 0.5) || status?.didJustFinish)) {
-        await get().skipToNext();
+      // When app comes to foreground, check actual player state: if current track has ended
+      // (e.g. we missed the status callback while backgrounded), advance so playback continues.
+      const state = get();
+      if (sound && state.currentTrack && state.currentIndex + 1 < state.queue.length) {
+        const pos = sound.currentTime ?? 0;
+        const dur = state.duration ?? sound.duration ?? 0;
+        const status = (sound as { currentStatus?: { didJustFinish?: boolean } }).currentStatus;
+        if (dur > 0 && (pos >= Math.max(0, dur - 0.5) || status?.didJustFinish)) {
+          await get().skipToNext();
+        }
       }
+    } finally {
+      onAppActiveInFlight = false;
     }
   },
 }));

@@ -52,7 +52,7 @@ function AppContent() {
 
   useEffect(() => {
     const onAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'background' || nextState === 'inactive') {
+      if (nextState === 'background') {
         usePlayerStore.getState().onAppBackground();
       } else if (nextState === 'active') {
         usePlayerStore.getState().onAppActive();
