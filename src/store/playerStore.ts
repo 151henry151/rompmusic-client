@@ -14,17 +14,26 @@ import { getToken } from '../api/client';
 import { useSettingsStore } from './settingsStore';
 
 /**
- * Web: Safari does not support OGG, so use original (MP3/M4A/AAC/FLAC work in Safari).
- * Other browsers get OGG for consistent behavior. Native uses settings.
+ * Stream format selection:
+ * - Respect configured effective format on every platform.
+ * - On Safari/WebKit, force original because OGG is not supported reliably.
  */
 function getStreamFormat(): 'original' | 'ogg' {
+  const preferred = useSettingsStore.getState().getEffectiveStreamFormat();
   if (Platform.OS === 'web') {
-    if (typeof navigator !== 'undefined' && navigator.vendor?.includes('Apple') && typeof navigator.userAgent === 'string' && !navigator.userAgent.includes('CriOS') && !navigator.userAgent.includes('FxiOS')) {
+    if (
+      preferred === 'ogg' &&
+      typeof navigator !== 'undefined' &&
+      navigator.vendor?.includes('Apple') &&
+      typeof navigator.userAgent === 'string' &&
+      !navigator.userAgent.includes('CriOS') &&
+      !navigator.userAgent.includes('FxiOS')
+    ) {
       return 'original';
     }
-    return 'ogg';
+    return preferred;
   }
-  return useSettingsStore.getState().getEffectiveStreamFormat();
+  return preferred;
 }
 
 /** Start prestarting (play next at volume 0) this many seconds before end so it has time to load. Load time can be ~12s with transcoding or slow networks. */
@@ -113,6 +122,38 @@ function scheduleAdvance(remainingMs: number, trackId: number, onAdvance: () => 
 const activePlayers = new Set<AudioPlayer>();
 let suppressRemoteSkipDetectionUntil = 0;
 let remoteSkipInFlight = false;
+
+function trySetAndroidNativeQueue(player: AudioPlayer, urls: string[], startIndex: number): boolean {
+  const setQueueFn = (
+    player as unknown as {
+      setQueue?: ((urisJson: string, startIndex: number) => void) | ((uris: string[], startIndex: number) => void);
+    }
+  ).setQueue;
+  if (typeof setQueueFn !== 'function') return false;
+  // Support both patched and upstream queue signatures.
+  try {
+    (setQueueFn as (urisJson: string, index: number) => void).call(player, JSON.stringify(urls), startIndex);
+    return true;
+  } catch {
+    try {
+      (setQueueFn as (uris: string[], index: number) => void).call(player, urls, startIndex);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function trySeekToAndroidNativeQueueIndex(player: AudioPlayer, index: number): boolean {
+  const seekToMediaItem = (player as unknown as { seekToMediaItem?: (targetIndex: number) => void }).seekToMediaItem;
+  if (typeof seekToMediaItem !== 'function') return false;
+  try {
+    seekToMediaItem.call(player, index);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function stopAndRemoveAllPlayers(): void {
   for (const p of activePlayers) {
@@ -289,32 +330,36 @@ function preloadNext(track: Track): AudioPlayer | null {
 /** Update lock screen / Now Playing metadata (iOS/Android). No-op on web. */
 function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null): void {
   if (!player) return;
-  const setActive = (player as {
-    setActiveForLockScreen?(
-      active: boolean,
-      metadata?: Record<string, string | undefined>,
-      options?: { showSeekForward?: boolean; showSeekBackward?: boolean }
-    ): void;
-  }).setActiveForLockScreen;
-  const updateMetadata = (player as {
-    updateLockScreenMetadata?(metadata: Record<string, string | undefined>): void;
-  }).updateLockScreenMetadata;
-  if (!setActive) return;
-  if (!track) {
-    setActive.call(player, false);
-    return;
+  try {
+    const setActive = (player as {
+      setActiveForLockScreen?(
+        active: boolean,
+        metadata?: Record<string, string | undefined>,
+        options?: { showSeekForward?: boolean; showSeekBackward?: boolean }
+      ): void;
+    }).setActiveForLockScreen;
+    const updateMetadata = (player as {
+      updateLockScreenMetadata?(metadata: Record<string, string | undefined>): void;
+    }).updateLockScreenMetadata;
+    if (!setActive) return;
+    if (!track) {
+      setActive.call(player, false);
+      return;
+    }
+    const metadata = {
+      title: track.title,
+      artist: track.artist_name || 'Unknown',
+      albumTitle: track.album_title,
+      artworkUrl: getArtworkMetadataUrl(track),
+    };
+    setActive.call(player, true, metadata, {
+      showSeekForward: true,
+      showSeekBackward: true,
+    });
+    updateMetadata?.call(player, metadata);
+  } catch {
+    /* ignore lock-screen metadata failures so queue playback keeps running */
   }
-  const metadata = {
-    title: track.title,
-    artist: track.artist_name || 'Unknown',
-    albumTitle: track.album_title,
-    artworkUrl: getArtworkMetadataUrl(track),
-  };
-  setActive.call(player, true, metadata, {
-    showSeekForward: true,
-    showSeekBackward: true,
-  });
-  updateMetadata?.call(player, metadata);
 }
 
 /** Call play(); if not loaded yet, call again when isLoaded (keeps preload, no extra request). */
@@ -377,14 +422,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       } else if (Platform.OS === 'android' && queue.length > 1) {
         // Native queue: ExoPlayer advances to next track when current ends, even when device is locked.
         // If setQueue/addListener aren't available (e.g. patch not applied or method not exposed to JS), fall back to single-track path.
+        let nativeQueueStarted = false;
         try {
           stopAndRemoveAllPlayers();
-          useNativeQueueAndroid = true;
-          sound = createAudioPlayer(null, { updateInterval: 150, downloadFirst: false });
+          sound = createAudioPlayer(getStreamUrl(currentTrack), { updateInterval: 150, downloadFirst: false });
           const urls = queue.map((t) => getStreamUrl(t));
-          const setQueueFn = (sound as unknown as { setQueue?: (urisJson: string, startIndex: number) => void }).setQueue;
-          if (typeof setQueueFn !== 'function') throw new Error('setQueue not available');
-          setQueueFn.call(sound, JSON.stringify(urls), currentIndex);
+          if (!trySetAndroidNativeQueue(sound, urls, currentIndex)) throw new Error('setQueue not available');
+          useNativeQueueAndroid = true;
           activePlayers.add(sound);
           const q = queue;
           sound.addListener('playbackStatusUpdate', (status: { currentMediaItemIndex?: number; currentTime?: number; duration?: number }) => {
@@ -399,13 +443,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           sound.volume = currentVolume;
           setLockScreenMetadata(sound, currentTrack);
           sound.play();
+          nativeQueueStarted = true;
           set({ isLoading: false });
         } catch (e) {
-          if (sound) {
+          if (!nativeQueueStarted && sound) {
             removePlayer(sound);
             sound = null;
           }
           useNativeQueueAndroid = false;
+          console.warn('Native Android queue unavailable; falling back to JS track advancement', e);
           const nextIndex = currentIndex + 1;
           const nextTrack = nextIndex < queue.length ? queue[nextIndex] : null;
           sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
@@ -457,11 +503,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
     if (useNativeQueueAndroid && sound && currentIndex + 1 < queue.length) {
       const nextIndex = currentIndex + 1;
-      (sound as unknown as { seekToMediaItem: (index: number) => void }).seekToMediaItem(nextIndex);
-      const nextTrack = queue[nextIndex];
-      set({ currentIndex: nextIndex, currentTrack: nextTrack, position: 0, duration: nextTrack.duration ?? 0 });
-      setLockScreenMetadata(sound, nextTrack);
-      return;
+      if (trySeekToAndroidNativeQueueIndex(sound, nextIndex)) {
+        const nextTrack = queue[nextIndex];
+        set({ currentIndex: nextIndex, currentTrack: nextTrack, position: 0, duration: nextTrack.duration ?? 0 });
+        setLockScreenMetadata(sound, nextTrack);
+        return;
+      }
+      useNativeQueueAndroid = false;
     }
     if (currentIndex + 1 >= queue.length) {
       if (autoplayEnabled && currentTrack) {
@@ -564,11 +612,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { position, queue, currentIndex } = get();
     if (useNativeQueueAndroid && sound && currentIndex > 0) {
       const prevIndex = currentIndex - 1;
-      (sound as unknown as { seekToMediaItem: (index: number) => void }).seekToMediaItem(prevIndex);
-      const prevTrack = queue[prevIndex];
-      set({ currentIndex: prevIndex, currentTrack: prevTrack, position: 0, duration: prevTrack.duration ?? 0 });
-      setLockScreenMetadata(sound, prevTrack);
-      return;
+      if (trySeekToAndroidNativeQueueIndex(sound, prevIndex)) {
+        const prevTrack = queue[prevIndex];
+        set({ currentIndex: prevIndex, currentTrack: prevTrack, position: 0, duration: prevTrack.duration ?? 0 });
+        setLockScreenMetadata(sound, prevTrack);
+        return;
+      }
+      useNativeQueueAndroid = false;
     }
     if (position > 3 && sound) {
       sound.seekTo(0);

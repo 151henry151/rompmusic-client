@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- (Changes since last release will be listed here)
+- Use the effective configured stream format on web playback and keep Safari on original format when OGG is selected.
+- Harden Android native queue setup by trying both JSON-string and array `setQueue` payload signatures before falling back.
+
+### Fixed
+
+- Replace the malformed `expo-audio+1.1.1` patch with a valid patch-package diff so native queue bridge methods apply during install.
+- Prevent lock-screen metadata and native seek bridge errors from forcing JS-only track advancement in Android album playback.
 
 ## [0.1.4] - 2026-02-14
 
