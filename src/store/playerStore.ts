@@ -99,6 +99,8 @@ let positionAtBackground = 0;
 let durationAtBackground = 0;
 /** Time-based advance: fires when current track would end so next track starts even if app is backgrounded (JS callbacks throttled). */
 let scheduledAdvanceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+/** Track whether app is currently foregrounded; use strict end detection in foreground to avoid truncation. */
+let isAppInForeground = true;
 
 function clearScheduledAdvance(): void {
   if (scheduledAdvanceTimeoutId != null) {
@@ -302,7 +304,12 @@ function loadAndPlay(
       nextSound.volume = 0;
       nextSound.play();
     }
-    const atEnd = (status.isLoaded || pos > 0) && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
+    const allowEarlyTransition = !isAppInForeground;
+    const atEnd =
+      allowEarlyTransition &&
+      (status.isLoaded || pos > 0) &&
+      dur > 0 &&
+      pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
     if (!finished && (status.didJustFinish || atEnd)) {
       finished = true;
       clearEndFallback();
@@ -310,9 +317,9 @@ function loadAndPlay(
       if (sound === player) onFinish();
     }
   });
-  // Fallback: if status updates stop before end (e.g. on some native streams), advance once we're past 95% of duration
+  // Background-only fallback: if status updates stop before end while backgrounded, force advance.
   const effectiveDuration = (track.duration ?? 0) > 0 ? (track.duration ?? 0) : UNKNOWN_DURATION_FALLBACK_SEC;
-  const fallbackMs = Math.max(0, effectiveDuration * 0.95 * 1000);
+  const fallbackMs = isAppInForeground ? 0 : Math.max(0, effectiveDuration * 0.95 * 1000);
   if (fallbackMs > 0) {
     endFallbackTimeout = setTimeout(() => {
       endFallbackTimeout = null;
@@ -323,10 +330,10 @@ function loadAndPlay(
       }
     }, fallbackMs);
   }
-  // Time-based advance: when device is locked, JS status updates are throttled. Schedule advance at track end so next track starts in background.
+  // Time-based advance: when device is locked, JS status updates are throttled. Use only while backgrounded.
   const trackDur = (track.duration ?? 0) > 0 ? (track.duration ?? 0) : UNKNOWN_DURATION_FALLBACK_SEC;
   const remainingMs = trackDur > 0 && position < trackDur ? (trackDur - position) * 1000 : 0;
-  if (remainingMs > 0) {
+  if (!isAppInForeground && remainingMs > 0) {
     scheduleAdvance(remainingMs, track.id, () => {
       if (!finished && sound === player) {
         finished = true;
@@ -511,7 +518,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await sound.seekTo(seconds);
       set({ position: seconds });
       const { currentTrack, duration } = get();
-      if (currentTrack && duration > 0 && seconds < duration) {
+      if (!isAppInForeground && currentTrack && duration > 0 && seconds < duration) {
         const remainingMs = (duration - seconds) * 1000;
         if (remainingMs > 0) scheduleAdvance(remainingMs, currentTrack.id, () => get().skipToNext());
       }
@@ -600,7 +607,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           nextSound.volume = 0;
           nextSound.play();
         }
-        const atEnd = (status.isLoaded || pos > 0) && dur > 0 && pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
+        const allowEarlyTransition = !isAppInForeground;
+        const atEnd =
+          allowEarlyTransition &&
+          (status.isLoaded || pos > 0) &&
+          dur > 0 &&
+          pos >= Math.max(0, dur - PROMOTE_BEFORE_END_SEC);
         if (!finished && (status.didJustFinish || atEnd)) {
           finished = true;
           clearScheduledAdvance();
@@ -612,7 +624,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       setLockScreenMetadata(sound, nextTrack);
       const dur = nextTrack.duration ?? 0;
-      if (dur > 0) scheduleAdvance(dur * 1000, nextTrack.id, () => get().skipToNext());
+      if (!isAppInForeground && dur > 0) scheduleAdvance(dur * 1000, nextTrack.id, () => get().skipToNext());
       const nextNext = nextIndex + 1 < q.length ? q[nextIndex + 1] : null;
       if (nextNext) nextSound = preloadNext(nextNext);
     } else {
@@ -726,6 +738,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   onAppBackground: () => {
     const { isPlaying, position, duration, currentTrack } = get();
     if (Platform.OS === 'web') return;
+    isAppInForeground = false;
     if (useNativeQueueAndroid) {
       backgroundedAt = null;
       return;
@@ -736,11 +749,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       backgroundedAt = Date.now();
       positionAtBackground = livePosition;
       durationAtBackground = liveDuration;
+      const remainingMs = (liveDuration - livePosition) * 1000;
+      if (remainingMs > 0) {
+        scheduleAdvance(remainingMs, currentTrack.id, () => get().skipToNext());
+      }
     }
   },
 
   onAppActive: async () => {
     if (Platform.OS === 'web') return;
+    isAppInForeground = true;
+    clearScheduledAdvance();
     if (onAppActiveInFlight) return;
     onAppActiveInFlight = true;
     try {

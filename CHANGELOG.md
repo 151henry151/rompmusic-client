@@ -10,12 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Trigger AppState background handling only for true `background` transitions (not `inactive`).
+- Restrict early end-of-track promotion heuristics to background playback only.
 
 ### Fixed
 
 - Sync Android native-queue index and position from player status when the app becomes active.
 - Limit non-native Android resume catch-up to a single next-track advance to avoid multi-track skips after lock-screen stalls.
 - Capture Android background playback snapshots from live player time/duration instead of stale store values.
+- Avoid truncating foreground track endings by requiring `didJustFinish` for next-track advancement while app is active.
 
 ## [0.1.6] - 2026-03-05
 
