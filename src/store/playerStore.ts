@@ -101,6 +101,7 @@ let durationAtBackground = 0;
 let scheduledAdvanceTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** Track whether app is currently foregrounded; use strict end detection in foreground to avoid truncation. */
 let isAppInForeground = true;
+let backgroundTrackId: number | null = null;
 
 function clearScheduledAdvance(): void {
   if (scheduledAdvanceTimeoutId != null) {
@@ -741,18 +742,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     isAppInForeground = false;
     if (useNativeQueueAndroid) {
       backgroundedAt = null;
+      backgroundTrackId = null;
       return;
     }
     const livePosition = sound?.currentTime ?? position;
     const liveDuration = sound?.duration ?? duration;
     if (isPlaying && currentTrack && liveDuration > 0) {
       backgroundedAt = Date.now();
+      backgroundTrackId = currentTrack.id;
       positionAtBackground = livePosition;
       durationAtBackground = liveDuration;
       const remainingMs = (liveDuration - livePosition) * 1000;
       if (remainingMs > 0) {
         scheduleAdvance(remainingMs, currentTrack.id, () => get().skipToNext());
       }
+    } else {
+      backgroundTrackId = null;
     }
   },
 
@@ -767,19 +772,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       if (useNativeQueueAndroid && sound) {
         syncFromAndroidNativeQueueStatus();
         backgroundedAt = null;
+        backgroundTrackId = null;
         return;
       }
       // Catch-up: if we were backgrounded and track(s) would have ended, advance to correct track
       if (backgroundedAt != null) {
+        const stateAtResume = get();
+        // If playback already advanced while backgrounded, do not run elapsed catch-up.
+        if (backgroundTrackId != null && stateAtResume.currentTrack?.id !== backgroundTrackId) {
+          backgroundedAt = null;
+          backgroundTrackId = null;
+        } else {
         const elapsedMs = Date.now() - backgroundedAt;
         backgroundedAt = null;
+        backgroundTrackId = null;
         const remainingSec = Math.max(0, durationAtBackground - positionAtBackground);
         // Conservative fallback: advance at most one track on resume.
         if (remainingSec >= 2 && elapsedMs >= (remainingSec + 1) * 1000) {
-          const state = get();
+          const state = stateAtResume;
           if (state.currentTrack && state.currentIndex + 1 < state.queue.length) {
             await get().skipToNext();
           }
+        }
         }
       }
       // When app comes to foreground, check actual player state: if current track has ended

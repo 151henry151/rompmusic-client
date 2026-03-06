@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Limit non-native Android resume catch-up to a single next-track advance to avoid multi-track skips after lock-screen stalls.
 - Capture Android background playback snapshots from live player time/duration instead of stale store values.
 - Avoid truncating foreground track endings by requiring `didJustFinish` for next-track advancement while app is active.
+- Skip Android foreground resume catch-up when playback already advanced to a new track while backgrounded.
 
 ## [0.1.6] - 2026-03-05
 
