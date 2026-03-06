@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Trigger AppState background handling only for true `background` transitions (not `inactive`).
 - Restrict early end-of-track promotion heuristics to background playback only.
 - Add Android mini-player previous/next buttons on either side of the play/pause control.
+- Sort album tracks using metadata with fallback parsing of leading title numbers when track tags are missing.
 
 ### Fixed
 
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Skip Android foreground resume catch-up when playback already advanced to a new track while backgrounded.
 - Set Android ExoPlayer wake mode to `WAKE_MODE_NETWORK` so queued stream transitions can continue while device is locked.
 - Prefer live player duration/status on foreground resume and suppress forced skips while a track is actively playing.
+- Retry Android playback startup with transcoded OGG when original-format stream remains stuck at `0:00`.
 
 ## [0.1.6] - 2026-03-05
 

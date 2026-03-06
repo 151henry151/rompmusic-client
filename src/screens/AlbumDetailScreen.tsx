@@ -33,6 +33,32 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function parseLeadingTrackNumber(title?: string): number | null {
+  const match = (title || '').trim().match(/^(\d{1,3})\s*[-.)]?\s*/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getSortableDiscNumber(track: Track): number {
+  const disc = Number(track.disc_number);
+  return Number.isFinite(disc) && disc > 0 ? disc : 1;
+}
+
+function getSortableTrackNumber(track: Track): number {
+  const trackNo = Number(track.track_number);
+  if (Number.isFinite(trackNo) && trackNo > 0) return trackNo;
+  return parseLeadingTrackNumber(track.title) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function compareTracksForAlbumOrder(a: Track, b: Track): number {
+  const discDelta = getSortableDiscNumber(a) - getSortableDiscNumber(b);
+  if (discDelta !== 0) return discDelta;
+  const trackDelta = getSortableTrackNumber(a) - getSortableTrackNumber(b);
+  if (trackDelta !== 0) return trackDelta;
+  return (a.title || '').localeCompare(b.title || '');
+}
+
 function TrackRow({
   track,
   albumId,
@@ -196,7 +222,7 @@ export default function AlbumDetailScreen() {
     () =>
       trackQueries.map((q) => {
         const list = (q.data || []) as (Track & { album_title?: string; artist_name?: string })[];
-        return dedupeTracks(list).sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
+        return dedupeTracks(list).sort(compareTracksForAlbumOrder);
       }),
     [trackQueries]
   );
@@ -235,7 +261,7 @@ export default function AlbumDetailScreen() {
     } else {
       allTracksByAlbum.forEach((arr) => out.push(...arr));
     }
-    return dedupeTracks(out).sort((a, b) => (a.disc_number - b.disc_number) || (a.track_number - b.track_number));
+    return dedupeTracks(out).sort(compareTracksForAlbumOrder);
   }, [allTracksByAlbum, showAsSingleRelease]);
   const displayTitle = primaryAlbum ? (isGrouped ? getAlbumDisplayTitle(primaryAlbum.title) : primaryAlbum.title) : '';
   const artistNames = primaryAlbum

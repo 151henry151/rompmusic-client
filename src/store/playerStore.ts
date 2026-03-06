@@ -53,6 +53,7 @@ export interface Track {
   track_number: number;
   disc_number: number;
   duration: number;
+  format?: string;
 }
 
 interface PlayerState {
@@ -99,6 +100,8 @@ let positionAtBackground = 0;
 let durationAtBackground = 0;
 /** Time-based advance: fires when current track would end so next track starts even if app is backgrounded (JS callbacks throttled). */
 let scheduledAdvanceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+/** Retry startup with transcoding if Android direct stream never starts. */
+let startFallbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** Track whether app is currently foregrounded; use strict end detection in foreground to avoid truncation. */
 let isAppInForeground = true;
 let backgroundTrackId: number | null = null;
@@ -107,6 +110,13 @@ function clearScheduledAdvance(): void {
   if (scheduledAdvanceTimeoutId != null) {
     clearTimeout(scheduledAdvanceTimeoutId);
     scheduledAdvanceTimeoutId = null;
+  }
+}
+
+function clearStartFallback(): void {
+  if (startFallbackTimeoutId != null) {
+    clearTimeout(startFallbackTimeoutId);
+    startFallbackTimeoutId = null;
   }
 }
 
@@ -182,6 +192,7 @@ function syncFromAndroidNativeQueueStatus(): boolean {
 }
 
 function stopAndRemoveAllPlayers(): void {
+  clearStartFallback();
   for (const p of activePlayers) {
     try {
       p.pause();
@@ -226,11 +237,29 @@ function removePlayer(p: AudioPlayer | null): void {
 }
 
 function getStreamUrl(track: Track): string {
-  const format = getStreamFormat();
+  const format = getStreamFormatForTrack(track);
   let url = api.getStreamUrl(track.id, format);
   const t = getToken();
   if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
   return url;
+}
+
+function getStreamUrlForFormat(track: Track, format: 'original' | 'ogg'): string {
+  let url = api.getStreamUrl(track.id, format);
+  const t = getToken();
+  if (t) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
+  return url;
+}
+
+function getStreamFormatForTrack(track: Track): 'original' | 'ogg' {
+  const preferred = getStreamFormat();
+  if (Platform.OS !== 'android' || preferred !== 'original') return preferred;
+  const fmt = (track.format || '').toLowerCase().trim();
+  if (!fmt) return preferred;
+  // Android ExoPlayer direct-stream support is inconsistent for some container/codec combos;
+  // request transcoded OGG for uncommon formats to avoid "stuck at 0:00" failures.
+  const supportedOriginal = new Set(['mp3', 'flac', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'wav', 'wave', 'amr']);
+  return supportedOriginal.has(fmt) ? preferred : 'ogg';
 }
 
 function getArtworkMetadataUrl(track: Track): string {
@@ -267,9 +296,10 @@ function loadAndPlay(
   onFinish: () => void,
   onPositionUpdate: (pos: number) => void,
   position = 0,
-  onPlaybackStarted?: () => void
+  onPlaybackStarted?: () => void,
+  forceFormat?: 'original' | 'ogg'
 ): AudioPlayer {
-  const url = getStreamUrl(track);
+  const url = forceFormat ? getStreamUrlForFormat(track, forceFormat) : getStreamUrl(track);
   const player = createAudioPlayer(url, { updateInterval: 150, downloadFirst: false });
   activePlayers.add(player);
   player.volume = currentVolume;
@@ -443,9 +473,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   play: async () => {
     const { currentTrack, queue, currentIndex } = get();
     if (!currentTrack) return;
+    clearStartFallback();
     set({ isPlaying: true, isLoading: true, error: null });
     const onPosition = (pos: number) => set({ position: pos });
-    const onPlaybackStarted = () => set({ isLoading: false });
+    const onPlaybackStarted = () => {
+      clearStartFallback();
+      set({ isLoading: false });
+    };
     try {
       if (sound) {
         sound.play();
@@ -486,6 +520,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
           setLockScreenMetadata(sound, currentTrack);
           if (nextTrack) nextSound = preloadNext(nextTrack);
+          if (Platform.OS === 'android' && getStreamFormatForTrack(currentTrack) === 'original') {
+            startFallbackTimeoutId = setTimeout(() => {
+              startFallbackTimeoutId = null;
+              const state = get();
+              if (!state.isPlaying || !state.isLoading || state.currentTrack?.id !== currentTrack.id) return;
+              const livePos = sound?.currentTime ?? 0;
+              if (livePos > 0) return;
+              removePlayer(sound);
+              sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, state.position, onPlaybackStarted, 'ogg');
+              setLockScreenMetadata(sound, currentTrack);
+              if (nextTrack) nextSound = preloadNext(nextTrack);
+            }, 7000);
+          }
         }
       } else {
         const nextIndex = currentIndex + 1;
@@ -493,6 +540,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, get().position, onPlaybackStarted);
         setLockScreenMetadata(sound, currentTrack);
         if (nextTrack) nextSound = preloadNext(nextTrack);
+        if (Platform.OS === 'android' && getStreamFormatForTrack(currentTrack) === 'original') {
+          startFallbackTimeoutId = setTimeout(() => {
+            startFallbackTimeoutId = null;
+            const state = get();
+            if (!state.isPlaying || !state.isLoading || state.currentTrack?.id !== currentTrack.id) return;
+            const livePos = sound?.currentTime ?? 0;
+            if (livePos > 0) return;
+            removePlayer(sound);
+            sound = loadAndPlay(currentTrack, () => get().skipToNext(), onPosition, state.position, onPlaybackStarted, 'ogg');
+            setLockScreenMetadata(sound, currentTrack);
+            if (nextTrack) nextSound = preloadNext(nextTrack);
+          }, 7000);
+        }
         // Keep isLoading true until onPlaybackStarted fires (stream has started)
       }
     } catch (e) {
@@ -505,6 +565,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   pause: async () => {
     clearScheduledAdvance();
+    clearStartFallback();
     if (sound) {
       set({ position: sound.currentTime });
       sound.pause();
@@ -528,6 +589,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   skipToNext: async () => {
     clearScheduledAdvance();
+    clearStartFallback();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
     if (useNativeQueueAndroid && sound && currentIndex + 1 < queue.length) {
@@ -642,6 +704,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   skipToPrevious: async () => {
+    clearStartFallback();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     const { position, queue, currentIndex } = get();
     if (useNativeQueueAndroid && sound && currentIndex > 0) {
