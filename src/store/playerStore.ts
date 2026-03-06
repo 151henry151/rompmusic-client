@@ -9,9 +9,11 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import TrackPlayer, { Event, State, type AddTrack } from 'react-native-track-player';
 import { api } from '../api/client';
 import { getToken } from '../api/client';
 import { useSettingsStore } from './settingsStore';
+import { initAndroidTrackPlayer } from '../services/androidTrackPlayer';
 
 /**
  * Stream format selection:
@@ -136,6 +138,135 @@ const activePlayers = new Set<AudioPlayer>();
 let suppressRemoteSkipDetectionUntil = 0;
 let remoteSkipInFlight = false;
 let onAppActiveInFlight = false;
+let androidQueueSignature = '';
+let androidTrackPlayerListenersBound = false;
+const androidTrackPlayerSubscriptions: Array<{ remove: () => void }> = [];
+
+function isAndroidTrackPlayerMode(): boolean {
+  return Platform.OS === 'android';
+}
+
+function mapTrackToAndroidQueueItem(track: Track): AddTrack {
+  const item: AddTrack = {
+    id: String(track.id),
+    url: getStreamUrl(track),
+    title: track.title,
+    artist: track.artist_name || 'Unknown',
+    album: track.album_title,
+    artwork: getArtworkMetadataUrl(track),
+  };
+  if (track.duration > 0) item.duration = track.duration;
+  return item;
+}
+
+function getAndroidQueueSignature(queue: Track[], startIndex: number): string {
+  const ids = queue.map((t) => `${t.id}:${getStreamFormatForTrack(t)}`).join(',');
+  return `${startIndex}|${ids}`;
+}
+
+async function syncFromAndroidTrackPlayer(): Promise<void> {
+  if (!isAndroidTrackPlayerMode()) return;
+  const state = usePlayerStore.getState();
+  const [activeIndex, progress, playback] = await Promise.all([
+    TrackPlayer.getActiveTrackIndex(),
+    TrackPlayer.getProgress(),
+    TrackPlayer.getPlaybackState(),
+  ]);
+  const idx =
+    typeof activeIndex === 'number' && activeIndex >= 0 && activeIndex < state.queue.length
+      ? activeIndex
+      : state.currentIndex;
+  const track = state.queue[idx] ?? state.currentTrack;
+  const duration = progress.duration > 0 ? progress.duration : (track?.duration ?? state.duration ?? 0);
+  usePlayerStore.setState({
+    currentIndex: idx,
+    currentTrack: track ?? null,
+    position: progress.position ?? state.position,
+    duration,
+    isPlaying: playback.state === State.Playing,
+    isLoading: playback.state === State.Loading || playback.state === State.Buffering,
+  });
+}
+
+function bindAndroidTrackPlayerListeners(): void {
+  if (!isAndroidTrackPlayerMode() || androidTrackPlayerListenersBound) return;
+  androidTrackPlayerListenersBound = true;
+
+  androidTrackPlayerSubscriptions.push(
+    TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+      usePlayerStore.setState({
+        isPlaying: event.state === State.Playing,
+        isLoading: event.state === State.Loading || event.state === State.Buffering,
+      });
+    })
+  );
+
+  androidTrackPlayerSubscriptions.push(
+    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (event) => {
+      const state = usePlayerStore.getState();
+      const track = state.currentTrack;
+      usePlayerStore.setState({
+        position: event.position ?? state.position,
+        duration: event.duration > 0 ? event.duration : (track?.duration ?? state.duration),
+      });
+    })
+  );
+
+  androidTrackPlayerSubscriptions.push(
+    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
+      const state = usePlayerStore.getState();
+      const idx =
+        typeof event.index === 'number' && event.index >= 0 && event.index < state.queue.length
+          ? event.index
+          : state.currentIndex;
+      const track = state.queue[idx] ?? state.currentTrack;
+      usePlayerStore.setState({
+        currentIndex: idx,
+        currentTrack: track ?? null,
+        position: 0,
+        duration: event.track?.duration ?? track?.duration ?? state.duration,
+      });
+    })
+  );
+
+  androidTrackPlayerSubscriptions.push(
+    TrackPlayer.addEventListener(Event.PlaybackError, (event) => {
+      usePlayerStore.setState({
+        isLoading: false,
+        isPlaying: false,
+        error: event.message || 'Playback failed',
+      });
+    })
+  );
+}
+
+async function ensureAndroidTrackPlayerReady(): Promise<void> {
+  if (!isAndroidTrackPlayerMode()) return;
+  await initAndroidTrackPlayer();
+  bindAndroidTrackPlayerListeners();
+}
+
+async function loadAndroidQueue(queue: Track[], startIndex: number): Promise<void> {
+  await ensureAndroidTrackPlayerReady();
+  const boundedIndex = queue.length === 0 ? 0 : Math.max(0, Math.min(startIndex, queue.length - 1));
+  const nextSignature = getAndroidQueueSignature(queue, boundedIndex);
+
+  if (nextSignature !== androidQueueSignature) {
+    await TrackPlayer.reset();
+    if (queue.length > 0) {
+      await TrackPlayer.add(queue.map(mapTrackToAndroidQueueItem));
+      await TrackPlayer.skip(boundedIndex, 0);
+    }
+    androidQueueSignature = nextSignature;
+  } else if (queue.length > 0) {
+    const activeIndex = await TrackPlayer.getActiveTrackIndex();
+    if (typeof activeIndex === 'number' && activeIndex !== boundedIndex) {
+      await TrackPlayer.skip(boundedIndex, 0);
+    }
+  }
+
+  await TrackPlayer.setVolume(currentVolume);
+}
 
 function trySetAndroidNativeQueue(player: AudioPlayer, urls: string[], startIndex: number): boolean {
   const setQueueFn = (
@@ -193,6 +324,7 @@ function syncFromAndroidNativeQueueStatus(): boolean {
 
 function stopAndRemoveAllPlayers(): void {
   clearStartFallback();
+  androidQueueSignature = '';
   for (const p of activePlayers) {
     try {
       p.pause();
@@ -462,17 +594,58 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setVolume: async (v: number) => {
     currentVolume = Math.max(0, Math.min(1, v));
     set({ volume: currentVolume });
+    if (isAndroidTrackPlayerMode()) {
+      await ensureAndroidTrackPlayerReady();
+      await TrackPlayer.setVolume(currentVolume);
+      return;
+    }
     if (sound) sound.volume = currentVolume;
   },
 
   setQueue: (tracks, startIndex = 0) => {
-    if (Platform.OS === 'android' && tracks.length <= 1) useNativeQueueAndroid = false;
-    set({ queue: tracks, currentIndex: startIndex, autoplayStartIndex: null });
+    const boundedIndex = tracks.length === 0 ? 0 : Math.max(0, Math.min(startIndex, tracks.length - 1));
+    if (isAndroidTrackPlayerMode()) {
+      useNativeQueueAndroid = false;
+      androidQueueSignature = '';
+    }
+    set({
+      queue: tracks,
+      currentIndex: boundedIndex,
+      currentTrack: tracks[boundedIndex] ?? null,
+      position: 0,
+      duration: tracks[boundedIndex]?.duration ?? 0,
+      autoplayStartIndex: null,
+    });
   },
 
   play: async () => {
     const { currentTrack, queue, currentIndex } = get();
     if (!currentTrack) return;
+    if (isAndroidTrackPlayerMode()) {
+      const activeQueue = queue.length ? queue : [currentTrack];
+      const boundedIndex = activeQueue.length === 0 ? 0 : Math.max(0, Math.min(currentIndex, activeQueue.length - 1));
+      set({
+        queue: activeQueue,
+        currentIndex: boundedIndex,
+        currentTrack: activeQueue[boundedIndex] ?? currentTrack,
+        isPlaying: true,
+        isLoading: true,
+        error: null,
+      });
+      try {
+        await loadAndroidQueue(activeQueue, boundedIndex);
+        await TrackPlayer.play();
+        await syncFromAndroidTrackPlayer();
+        set({ isPlaying: true, isLoading: false, error: null });
+      } catch (e) {
+        set({
+          isLoading: false,
+          isPlaying: false,
+          error: e instanceof Error ? e.message : 'Playback failed',
+        });
+      }
+      return;
+    }
     clearStartFallback();
     set({ isPlaying: true, isLoading: true, error: null });
     const onPosition = (pos: number) => set({ position: pos });
@@ -566,6 +739,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   pause: async () => {
     clearScheduledAdvance();
     clearStartFallback();
+    if (isAndroidTrackPlayerMode()) {
+      await ensureAndroidTrackPlayerReady();
+      const progress = await TrackPlayer.getProgress();
+      await TrackPlayer.pause();
+      set({ isPlaying: false, position: progress.position ?? get().position, duration: progress.duration || get().duration });
+      return;
+    }
     if (sound) {
       set({ position: sound.currentTime });
       sound.pause();
@@ -574,6 +754,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   seekTo: async (seconds: number) => {
+    if (isAndroidTrackPlayerMode()) {
+      await ensureAndroidTrackPlayerReady();
+      await TrackPlayer.seekTo(seconds);
+      const progress = await TrackPlayer.getProgress();
+      set({
+        position: progress.position ?? seconds,
+        duration: progress.duration > 0 ? progress.duration : get().duration,
+      });
+      return;
+    }
     if (sound) {
       clearScheduledAdvance();
       suppressRemoteSkipDetectionUntil = Date.now() + 1600;
@@ -592,6 +782,66 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     clearStartFallback();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
+    if (isAndroidTrackPlayerMode()) {
+      await ensureAndroidTrackPlayerReady();
+      if (currentIndex + 1 >= queue.length) {
+        if (autoplayEnabled && currentTrack) {
+          try {
+            const similar = await api.getSimilarTracks(currentTrack.id, 15);
+            if (similar?.length) {
+              const mapped = similar.map((t: {
+                id: number;
+                title: string;
+                album_id: number;
+                artist_id: number;
+                album_title?: string;
+                artist_name?: string;
+                track_number: number;
+                disc_number: number;
+                duration: number;
+                format?: string;
+              }) => ({
+                id: t.id,
+                title: t.title,
+                album_id: t.album_id,
+                artist_id: t.artist_id,
+                album_title: t.album_title,
+                artist_name: t.artist_name,
+                track_number: t.track_number,
+                disc_number: t.disc_number,
+                duration: t.duration,
+                format: t.format,
+              }));
+              const startIndex = get().queue.length;
+              set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
+              queue = [...queue, ...mapped];
+              await TrackPlayer.add(mapped.map(mapTrackToAndroidQueueItem));
+              androidQueueSignature = '';
+            }
+          } catch {
+            /* ignore autoplay fetch errors */
+          }
+        }
+      }
+
+      const state = get();
+      if (state.currentIndex + 1 >= state.queue.length) {
+        await TrackPlayer.stop();
+        await TrackPlayer.reset();
+        androidQueueSignature = '';
+        set({ isPlaying: false, currentTrack: null, position: 0, duration: 0 });
+        return;
+      }
+
+      try {
+        await TrackPlayer.skipToNext();
+        await TrackPlayer.play();
+        await syncFromAndroidTrackPlayer();
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : 'Skip failed' });
+      }
+      return;
+    }
     if (useNativeQueueAndroid && sound && currentIndex + 1 < queue.length) {
       const nextIndex = currentIndex + 1;
       if (trySeekToAndroidNativeQueueIndex(sound, nextIndex)) {
@@ -707,6 +957,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     clearStartFallback();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
     const { position, queue, currentIndex } = get();
+    if (isAndroidTrackPlayerMode()) {
+      await ensureAndroidTrackPlayerReady();
+      const progress = await TrackPlayer.getProgress();
+      const livePos = progress.position ?? position;
+      if (livePos > 3) {
+        await TrackPlayer.seekTo(0);
+        set({ position: 0 });
+        return;
+      }
+      if (currentIndex <= 0) return;
+      try {
+        await TrackPlayer.skipToPrevious();
+        await TrackPlayer.play();
+        await syncFromAndroidTrackPlayer();
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : 'Skip failed' });
+      }
+      return;
+    }
     if (useNativeQueueAndroid && sound && currentIndex > 0) {
       const prevIndex = currentIndex - 1;
       if (trySeekToAndroidNativeQueueIndex(sound, prevIndex)) {
@@ -734,6 +1003,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playTrack: async (track, queue = []) => {
+    if (isAndroidTrackPlayerMode()) {
+      stopAndRemoveAllPlayers();
+      const tracks = queue.length ? queue : [track];
+      const idx = tracks.findIndex((t) => t.id === track.id);
+      const startIndex = idx >= 0 ? idx : 0;
+      set({
+        queue: tracks,
+        currentIndex: startIndex,
+        currentTrack: track,
+        position: 0,
+        duration: track.duration,
+        autoplayStartIndex: null,
+        error: null,
+      });
+      androidQueueSignature = '';
+      await get().play();
+      return;
+    }
     stopAndRemoveAllPlayers();
     const tracks = queue.length ? queue : [track];
     const idx = tracks.findIndex((t) => t.id === track.id);
@@ -744,11 +1031,43 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   addToQueue: (tracks) => {
     const arr = Array.isArray(tracks) ? tracks : [tracks];
+    if (isAndroidTrackPlayerMode()) {
+      set((s) => ({ queue: [...s.queue, ...arr], autoplayStartIndex: null }));
+      androidQueueSignature = '';
+      void (async () => {
+        try {
+          await ensureAndroidTrackPlayerReady();
+          await TrackPlayer.add(arr.map(mapTrackToAndroidQueueItem));
+        } catch {
+          /* ignore queue sync failures */
+        }
+      })();
+      return;
+    }
     set((s) => ({ queue: [...s.queue, ...arr], autoplayStartIndex: null }));
   },
 
   playNext: (tracks) => {
     const arr = Array.isArray(tracks) ? tracks : [tracks];
+    if (isAndroidTrackPlayerMode()) {
+      const state = get();
+      const insertAt = state.currentTrack ? state.currentIndex + 1 : state.queue.length;
+      set((s) => {
+        const next = [...s.queue];
+        next.splice(insertAt, 0, ...arr);
+        return { queue: next, autoplayStartIndex: null };
+      });
+      androidQueueSignature = '';
+      void (async () => {
+        try {
+          await ensureAndroidTrackPlayerReady();
+          await TrackPlayer.add(arr.map(mapTrackToAndroidQueueItem), insertAt);
+        } catch {
+          /* ignore queue sync failures */
+        }
+      })();
+      return;
+    }
     removePlayer(nextSound);
     nextSound = null;
     prestartedNext = false;
@@ -767,6 +1086,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   clearQueue: () => {
+    if (isAndroidTrackPlayerMode()) {
+      androidQueueSignature = '';
+      void (async () => {
+        try {
+          await ensureAndroidTrackPlayerReady();
+          await TrackPlayer.stop();
+          await TrackPlayer.reset();
+        } catch {
+          /* ignore clear failures */
+        }
+      })();
+      stopAndRemoveAllPlayers();
+      set({ queue: [], currentIndex: 0, currentTrack: null, isPlaying: false, position: 0, duration: 0, autoplayStartIndex: null });
+      return;
+    }
     set({ queue: [], currentIndex: 0, currentTrack: null, autoplayStartIndex: null });
   },
 
@@ -792,6 +1126,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           }));
           const startIndex = get().queue.length;
           set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
+          if (isAndroidTrackPlayerMode()) {
+            try {
+              await ensureAndroidTrackPlayerReady();
+              await TrackPlayer.add(mapped.map(mapTrackToAndroidQueueItem));
+              androidQueueSignature = '';
+            } catch {
+              /* ignore queue sync failures */
+            }
+          }
         }
       } catch {
         /* ignore */
@@ -803,6 +1146,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { isPlaying, position, duration, currentTrack } = get();
     if (Platform.OS === 'web') return;
     isAppInForeground = false;
+    if (isAndroidTrackPlayerMode()) {
+      backgroundedAt = null;
+      backgroundTrackId = null;
+      return;
+    }
     if (useNativeQueueAndroid) {
       backgroundedAt = null;
       backgroundTrackId = null;
@@ -828,6 +1176,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (Platform.OS === 'web') return;
     isAppInForeground = true;
     clearScheduledAdvance();
+    if (isAndroidTrackPlayerMode()) {
+      try {
+        await ensureAndroidTrackPlayerReady();
+        await syncFromAndroidTrackPlayer();
+      } catch {
+        /* ignore foreground sync failures */
+      } finally {
+        backgroundedAt = null;
+        backgroundTrackId = null;
+      }
+      return;
+    }
     if (onAppActiveInFlight) return;
     onAppActiveInFlight = true;
     try {

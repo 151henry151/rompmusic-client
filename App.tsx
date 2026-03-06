@@ -17,6 +17,7 @@ import { usePlayerStore } from './src/store/playerStore';
 import { useServerStore } from './src/store/serverStore';
 import { useSettingsStore } from './src/store/settingsStore';
 import { initAudio } from './src/services/audioService';
+import { initAndroidTrackPlayer } from './src/services/androidTrackPlayer';
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,11 @@ function AppContent() {
 
   useEffect(() => {
     (async () => {
+      try {
+        await initAndroidTrackPlayer();
+      } catch (error) {
+        console.error('Android TrackPlayer initialization failed', error);
+      }
       try {
         await initAudio();
       } catch (error) {

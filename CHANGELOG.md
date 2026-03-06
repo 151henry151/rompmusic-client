@@ -9,7 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (Changes since last release will be listed here)
+- Add Android native playback service initialization and remote-control handlers via `react-native-track-player`.
+
+### Changed
+
+- Route Android queue execution (`play`, `pause`, `seek`, `skip`, `playNext`, `addToQueue`) through native TrackPlayer queue APIs instead of JS timer-driven advancement logic.
+- Synchronize Android player UI state from native playback events and foreground re-sync calls.
+
+### Fixed
+
+- Keep Android queued playback running under lock-screen/background conditions by delegating transition handling to the native playback service.
+- Remove Android foreground resume catch-up heuristics from the primary playback path to avoid post-unlock extra-skip behavior.
 
 ## [0.1.7] - 2026-03-06
 
