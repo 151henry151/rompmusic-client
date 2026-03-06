@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Keep Android queued playback running under lock-screen/background conditions by delegating transition handling to the native playback service.
 - Remove Android foreground resume catch-up heuristics from the primary playback path to avoid post-unlock extra-skip behavior.
+- Patch `react-native-track-player` Kotlin nullability handling so Android release builds compile under Expo SDK 54 / React Native 0.81.
 
 ## [0.1.7] - 2026-03-06
 
