@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+### Changed
+
+- Increment `expo.android.versionCode` from `4` to `5` for production Android build metadata.
+
 ## [0.1.8] - 2026-03-06
 
 ### Added

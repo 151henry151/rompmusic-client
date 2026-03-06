@@ -35,7 +35,7 @@
       "permissions": [
         "android.permission.WAKE_LOCK"
       ],
-      "versionCode": 4
+      "versionCode": 5
     },
     "web": {
       "favicon": "./assets/favicon.png"
