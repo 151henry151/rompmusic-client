@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Increment `expo.android.versionCode` from `4` to `5` for production Android build metadata.
+- Set `newArchEnabled` to `false` for Android runtime compatibility with `react-native-track-player`.
+
+### Fixed
+
+- Add Android playback-service recovery handlers that retry playback errors and force queue progression when playback reports `Ended` before advancing to the next track.
 
 ## [0.1.8] - 2026-03-06
 

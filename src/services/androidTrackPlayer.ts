@@ -8,9 +8,11 @@ import TrackPlayer, {
   AppKilledPlaybackBehavior,
   Capability,
   Event,
+  State,
 } from 'react-native-track-player';
 
 let initialized = false;
+let transitionRecoveryInFlight = false;
 
 function isAlreadyInitializedError(error: unknown): boolean {
   return error instanceof Error && /already been initialized|already initialized/i.test(error.message);
@@ -67,6 +69,32 @@ export async function initAndroidTrackPlayer(): Promise<void> {
 }
 
 export async function androidPlaybackService(): Promise<void> {
+  const tryRecoverQueueProgression = async (): Promise<void> => {
+    if (transitionRecoveryInFlight) return;
+    transitionRecoveryInFlight = true;
+    try {
+      const [playbackState, activeIndex, queue] = await Promise.all([
+        TrackPlayer.getPlaybackState(),
+        TrackPlayer.getActiveTrackIndex(),
+        TrackPlayer.getQueue(),
+      ]);
+      if (
+        playbackState.state === State.Playing ||
+        playbackState.state === State.Loading ||
+        playbackState.state === State.Buffering
+      ) {
+        return;
+      }
+      if (typeof activeIndex !== 'number' || activeIndex < 0 || activeIndex + 1 >= queue.length) return;
+      await TrackPlayer.skipToNext();
+      await TrackPlayer.play();
+    } catch {
+      /* no-op */
+    } finally {
+      transitionRecoveryInFlight = false;
+    }
+  };
+
   TrackPlayer.addEventListener(Event.RemotePlay, async () => {
     await TrackPlayer.play();
   });
@@ -94,5 +122,21 @@ export async function androidPlaybackService(): Promise<void> {
   });
   TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
     await TrackPlayer.seekTo(event.position);
+  });
+  TrackPlayer.addEventListener(Event.PlaybackState, async (event) => {
+    if (event.state === State.Ended) {
+      await tryRecoverQueueProgression();
+    }
+  });
+  TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+    await tryRecoverQueueProgression();
+  });
+  TrackPlayer.addEventListener(Event.PlaybackError, async () => {
+    try {
+      await TrackPlayer.retry();
+      await TrackPlayer.play();
+    } catch {
+      await tryRecoverQueueProgression();
+    }
   });
 }
