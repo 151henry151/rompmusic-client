@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, Icon, IconButton, List, Switch } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -40,6 +40,8 @@ export default function MiniPlayer({ onExpand }: Props) {
     seekTo,
     setVolume,
     playTrack,
+    skipToPrevious,
+    skipToNext,
     autoplayEnabled,
     setAutoplay,
     autoplayStartIndex,
@@ -51,6 +53,7 @@ export default function MiniPlayer({ onExpand }: Props) {
   const manualEnd = autoplayStartIndex ?? queue.length;
   const manualQueue = queue.slice(0, manualEnd);
   const autoplayNext = autoplayStartIndex != null ? queue.slice(manualEnd) : [];
+  const showQueueSkipControls = Platform.OS === 'android';
 
   return (
     <View style={styles.container}>
@@ -181,6 +184,16 @@ export default function MiniPlayer({ onExpand }: Props) {
             </View>
           </View>
         </TouchableOpacity>
+        {showQueueSkipControls ? (
+          <IconButton
+            icon="skip-previous"
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              skipToPrevious();
+            }}
+            accessibilityLabel="Previous track"
+          />
+        ) : null}
         <IconButton
           icon={isPlaying ? 'pause' : 'play'}
           onPress={(e) => {
@@ -189,6 +202,16 @@ export default function MiniPlayer({ onExpand }: Props) {
           }}
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
         />
+        {showQueueSkipControls ? (
+          <IconButton
+            icon="skip-next"
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              skipToNext();
+            }}
+            accessibilityLabel="Next track"
+          />
+        ) : null}
         <View style={styles.volumeWrap} onStartShouldSetResponder={() => true}>
           <Slider
             value={volume}

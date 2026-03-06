@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (Changes since last release will be listed here)
+
+## [0.1.7] - 2026-03-06
+
 ### Changed
 
 - Trigger AppState background handling only for true `background` transitions (not `inactive`).
 - Restrict early end-of-track promotion heuristics to background playback only.
+- Add Android mini-player previous/next buttons on either side of the play/pause control.
 
 ### Fixed
 
@@ -149,7 +156,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Add Library, Search, and Player screens.
 - Add JWT authentication.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.7
 [0.1.6]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.6
 [0.1.5]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.5
 [0.1.4]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.4
