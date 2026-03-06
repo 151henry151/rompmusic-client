@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoid truncating foreground track endings by requiring `didJustFinish` for next-track advancement while app is active.
 - Skip Android foreground resume catch-up when playback already advanced to a new track while backgrounded.
 - Set Android ExoPlayer wake mode to `WAKE_MODE_NETWORK` so queued stream transitions can continue while device is locked.
+- Prefer live player duration/status on foreground resume and suppress forced skips while a track is actively playing.
 
 ## [0.1.6] - 2026-03-05
 

@@ -801,8 +801,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const state = get();
       if (sound && state.currentTrack && state.currentIndex + 1 < state.queue.length) {
         const pos = sound.currentTime ?? 0;
-        const dur = state.duration ?? sound.duration ?? 0;
-        const status = (sound as { currentStatus?: { didJustFinish?: boolean } }).currentStatus;
+        const liveDur = sound.duration ?? 0;
+        const dur = liveDur > 0 ? liveDur : (state.duration ?? 0);
+        const status = (sound as { currentStatus?: { didJustFinish?: boolean; playing?: boolean } }).currentStatus;
+        // If playback is actively progressing mid-track, never force a resume skip.
+        if (status?.playing && dur > 0 && pos < Math.max(0, dur - 1)) return;
         if (dur > 0 && (pos >= Math.max(0, dur - 0.5) || status?.didJustFinish)) {
           await get().skipToNext();
         }
