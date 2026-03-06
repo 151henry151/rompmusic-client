@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- (Changes since last release will be listed here)
+
+## [0.1.8] - 2026-03-06
+
+### Added
+
 - Add Android native playback service initialization and remote-control handlers via `react-native-track-player`.
 
 ### Changed
@@ -170,7 +176,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Add Library, Search, and Player screens.
 - Add JWT authentication.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.8
 [0.1.7]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.7
 [0.1.6]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.6
 [0.1.5]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.5
