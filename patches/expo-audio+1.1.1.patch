@@ -27,7 +27,7 @@ index 49a53af..4da60e3 100644
          runOnMain {
            ref.setActiveForLockScreen(active, metadata, options)
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
-index 320062e..69c60f4 100644
+index 320062e..d48b57c 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 @@ -3,6 +3,7 @@ package expo.modules.audio
@@ -38,7 +38,16 @@ index 320062e..69c60f4 100644
  import android.media.audiofx.Visualizer
  import android.util.Log
  import androidx.core.content.ContextCompat
-@@ -100,6 +101,23 @@ class AudioPlayer(
+@@ -75,6 +76,8 @@ class AudioPlayer(
+   val duration get() = if (ref.duration != C.TIME_UNSET) ref.duration / 1000f else 0f
+ 
+   init {
++    // Keep CPU/network active for streaming transitions while screen is locked.
++    ref.setWakeMode(C.WAKE_MODE_NETWORK)
+     addPlayerListeners()
+     source?.let {
+       setMediaSource(source)
+@@ -100,6 +103,23 @@ class AudioPlayer(
      startUpdating()
    }
  
@@ -62,7 +71,7 @@ index 320062e..69c60f4 100644
    fun setActiveForLockScreen(active: Boolean, metadata: Metadata? = null, options: AudioLockScreenOptions? = null) {
      if (active) {
        this.metadata = metadata
-@@ -207,6 +225,7 @@ class AudioPlayer(
+@@ -207,6 +227,7 @@ class AudioPlayer(
      return mapOf(
        "id" to id,
        "currentTime" to currentTime,
