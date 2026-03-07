@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - (Changes since last release will be listed here)
+
+## [0.1.10] - 2026-03-07
+
+### Added
+
 - Add `ios-simulator` EAS profile for development-client iOS simulator builds.
 - Add `expo-dev-client` dependency required for EAS development-client builds.
 
@@ -203,7 +208,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Add Library, Search, and Player screens.
 - Add JWT authentication.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.10
 [0.1.9]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.9
 [0.1.8]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.8
 [0.1.7]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.7
