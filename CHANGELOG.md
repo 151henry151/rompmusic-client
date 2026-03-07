@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Patch `@react-native-community/slider` iOS Fabric component source to compile only when `RCT_NEW_ARCH_ENABLED` is enabled, avoiding missing `RNCSliderComponentDescriptor` headers on old-architecture builds.
+- Guard `react-native-track-player` loading behind Android-only runtime requires so Expo Go iOS can run without missing-native-module startup crashes.
 
 ## [0.1.9] - 2026-03-06
 

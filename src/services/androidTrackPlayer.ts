@@ -4,15 +4,38 @@
  */
 
 import { Platform } from 'react-native';
-import TrackPlayer, {
-  AppKilledPlaybackBehavior,
-  Capability,
-  Event,
-  State,
-} from 'react-native-track-player';
+
+type TrackPlayerModule = typeof import('react-native-track-player');
+type TrackPlayerBindings = {
+  TrackPlayer: TrackPlayerModule['default'];
+  AppKilledPlaybackBehavior: TrackPlayerModule['AppKilledPlaybackBehavior'];
+  Capability: TrackPlayerModule['Capability'];
+  Event: TrackPlayerModule['Event'];
+  State: TrackPlayerModule['State'];
+};
 
 let initialized = false;
 let transitionRecoveryInFlight = false;
+let trackPlayerBindings: TrackPlayerBindings | null | undefined;
+
+function getTrackPlayerBindings(): TrackPlayerBindings | null {
+  if (Platform.OS !== 'android') return null;
+  if (trackPlayerBindings !== undefined) return trackPlayerBindings;
+  try {
+    const mod = require('react-native-track-player') as TrackPlayerModule;
+    trackPlayerBindings = {
+      TrackPlayer: mod.default,
+      AppKilledPlaybackBehavior: mod.AppKilledPlaybackBehavior,
+      Capability: mod.Capability,
+      Event: mod.Event,
+      State: mod.State,
+    };
+  } catch {
+    // Expo Go does not include custom native modules.
+    trackPlayerBindings = null;
+  }
+  return trackPlayerBindings;
+}
 
 function isAlreadyInitializedError(error: unknown): boolean {
   return error instanceof Error && /already been initialized|already initialized/i.test(error.message);
@@ -20,6 +43,9 @@ function isAlreadyInitializedError(error: unknown): boolean {
 
 export async function initAndroidTrackPlayer(): Promise<void> {
   if (Platform.OS !== 'android' || initialized) return;
+  const bindings = getTrackPlayerBindings();
+  if (!bindings) return;
+  const { TrackPlayer, AppKilledPlaybackBehavior, Capability } = bindings;
   try {
     await TrackPlayer.setupPlayer({
       minBuffer: 20,
@@ -69,6 +95,10 @@ export async function initAndroidTrackPlayer(): Promise<void> {
 }
 
 export async function androidPlaybackService(): Promise<void> {
+  const bindings = getTrackPlayerBindings();
+  if (!bindings) return;
+  const { TrackPlayer, Event, State } = bindings;
+
   const tryRecoverQueueProgression = async (): Promise<void> => {
     if (transitionRecoveryInFlight) return;
     transitionRecoveryInFlight = true;

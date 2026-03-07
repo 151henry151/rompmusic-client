@@ -9,7 +9,7 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
-import TrackPlayer, { Event, State, type AddTrack } from 'react-native-track-player';
+import type { AddTrack } from 'react-native-track-player';
 import { api } from '../api/client';
 import { getToken } from '../api/client';
 import { useSettingsStore } from './settingsStore';
@@ -138,12 +138,25 @@ const activePlayers = new Set<AudioPlayer>();
 let suppressRemoteSkipDetectionUntil = 0;
 let remoteSkipInFlight = false;
 let onAppActiveInFlight = false;
+type TrackPlayerModule = typeof import('react-native-track-player');
+const trackPlayerModule: TrackPlayerModule | null = Platform.OS === 'android'
+  ? (() => {
+      try {
+        return require('react-native-track-player') as TrackPlayerModule;
+      } catch {
+        return null;
+      }
+    })()
+  : null;
+const TrackPlayer: any = trackPlayerModule?.default;
+const TrackPlayerEvent: any = trackPlayerModule?.Event;
+const TrackPlayerState: any = trackPlayerModule?.State;
 let androidQueueSignature = '';
 let androidTrackPlayerListenersBound = false;
 const androidTrackPlayerSubscriptions: Array<{ remove: () => void }> = [];
 
 function isAndroidTrackPlayerMode(): boolean {
-  return Platform.OS === 'android';
+  return Platform.OS === 'android' && !!TrackPlayer && !!TrackPlayerEvent && !!TrackPlayerState;
 }
 
 function mapTrackToAndroidQueueItem(track: Track): AddTrack {
@@ -183,8 +196,8 @@ async function syncFromAndroidTrackPlayer(): Promise<void> {
     currentTrack: track ?? null,
     position: progress.position ?? state.position,
     duration,
-    isPlaying: playback.state === State.Playing,
-    isLoading: playback.state === State.Loading || playback.state === State.Buffering,
+    isPlaying: playback.state === TrackPlayerState.Playing,
+    isLoading: playback.state === TrackPlayerState.Loading || playback.state === TrackPlayerState.Buffering,
   });
 }
 
@@ -193,16 +206,16 @@ function bindAndroidTrackPlayerListeners(): void {
   androidTrackPlayerListenersBound = true;
 
   androidTrackPlayerSubscriptions.push(
-    TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+    TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackState, (event: any) => {
       usePlayerStore.setState({
-        isPlaying: event.state === State.Playing,
-        isLoading: event.state === State.Loading || event.state === State.Buffering,
+        isPlaying: event.state === TrackPlayerState.Playing,
+        isLoading: event.state === TrackPlayerState.Loading || event.state === TrackPlayerState.Buffering,
       });
     })
   );
 
   androidTrackPlayerSubscriptions.push(
-    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (event) => {
+    TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackProgressUpdated, (event: any) => {
       const state = usePlayerStore.getState();
       const track = state.currentTrack;
       usePlayerStore.setState({
@@ -213,7 +226,7 @@ function bindAndroidTrackPlayerListeners(): void {
   );
 
   androidTrackPlayerSubscriptions.push(
-    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
+    TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackActiveTrackChanged, (event: any) => {
       const state = usePlayerStore.getState();
       const idx =
         typeof event.index === 'number' && event.index >= 0 && event.index < state.queue.length
@@ -230,7 +243,7 @@ function bindAndroidTrackPlayerListeners(): void {
   );
 
   androidTrackPlayerSubscriptions.push(
-    TrackPlayer.addEventListener(Event.PlaybackError, (event) => {
+    TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackError, (event: any) => {
       usePlayerStore.setState({
         isLoading: false,
         isPlaying: false,
