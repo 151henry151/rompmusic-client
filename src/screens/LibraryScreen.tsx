@@ -517,7 +517,7 @@ export default function LibraryScreen() {
   targetSectionToScrollRef.current = targetSectionToScroll;
   const scrollToOffsetRef = useRef<(y: number) => void>(() => {});
   const sectionJumpFetchCountRef = useRef(0);
-  const SECTION_JUMP_FETCH_LIMIT = 30;
+  const SECTION_JUMP_FETCH_LIMIT = 300;
   const INFINITE_SCROLL_THRESHOLD = 400;
 
   const scrollToOffset = useCallback((y: number) => {
@@ -582,12 +582,38 @@ export default function LibraryScreen() {
     localSectionOffsetsRef.current = {};
   }, [sectionKeys, tab]);
 
-  const hasSectionInData =
-    tab === 'artists'
-      ? artistsByLetter.some((s) => s.letter === targetSectionToScroll)
-      : (albumsGroupedByDecade?.some((g) => g.decade === targetSectionToScroll)) ??
-        (albumsByLetter?.some((s) => s.letter === targetSectionToScroll)) ??
-        false;
+  const getSectionItemCount = useCallback((key: string): number => {
+    if (tab === 'artists') {
+      return artistsByLetter.find((s) => s.letter === key)?.items.length ?? 0;
+    }
+    if (tab === 'albums') {
+      if (albumsGroupedByDecade) return albumsGroupedByDecade.find((g) => g.decade === key)?.items.length ?? 0;
+      return albumsByLetter?.find((s) => s.letter === key)?.items.length ?? 0;
+    }
+    return 0;
+  }, [tab, artistsByLetter, albumsGroupedByDecade, albumsByLetter]);
+
+  const hasTargetSectionInData = targetSectionToScroll ? getSectionItemCount(targetSectionToScroll) > 0 : false;
+
+  const findNextLoadedSection = useCallback(
+    (key: string): string | null => {
+      const start = Math.max(0, sectionKeys.indexOf(key));
+      for (let i = start; i < sectionKeys.length; i++) {
+        const candidate = sectionKeys[i];
+        if (getSectionItemCount(candidate) > 0) return candidate;
+      }
+      return null;
+    },
+    [sectionKeys, getSectionItemCount]
+  );
+
+  const scrollSectionIntoViewWeb = useCallback((key: string): boolean => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return false;
+    const el = document.getElementById(`${LIBRARY_SECTION_ID_PREFIX}${key}`);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
+  }, []);
 
   const getSectionScrollY = useCallback((key: string): number | undefined => {
     const fromMeasure = sectionOffsetsRef.current[key];
@@ -623,16 +649,12 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     if (!targetSectionToScroll) return;
-    if (hasSectionInData) {
+    if (hasTargetSectionInData) {
       const key = targetSectionToScroll;
       if (Platform.OS === 'web') {
-        const id = `${LIBRARY_SECTION_ID_PREFIX}${key}`;
         const tryScroll = () => {
-          const el = document.getElementById(id);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setTargetSectionToScroll(null);
-          }
+          if (!scrollSectionIntoViewWeb(key)) return;
+          setTargetSectionToScroll(null);
         };
         requestAnimationFrame(() => setTimeout(tryScroll, 50));
         return;
@@ -643,12 +665,31 @@ export default function LibraryScreen() {
       requestAnimationFrame(() => setTimeout(tryScrollNative, 100));
       return;
     }
-    if (sectionJumpFetchCountRef.current >= SECTION_JUMP_FETCH_LIMIT) {
+    const nextLoaded = findNextLoadedSection(targetSectionToScroll);
+    const hasMore = tab === 'artists' ? hasMoreArtists : hasMoreAlbums;
+    const loading = tab === 'artists' ? artistsLoadingMore : albumsLoadingMore;
+    if (!hasMore) {
+      if (nextLoaded) {
+        if (Platform.OS === 'web') {
+          scrollSectionIntoViewWeb(nextLoaded);
+        } else {
+          scrollToSectionByRef(nextLoaded);
+        }
+      }
       setTargetSectionToScroll(null);
       return;
     }
-    const hasMore = tab === 'artists' ? hasMoreArtists : hasMoreAlbums;
-    const loading = tab === 'artists' ? artistsLoadingMore : albumsLoadingMore;
+    if (sectionJumpFetchCountRef.current >= SECTION_JUMP_FETCH_LIMIT) {
+      if (nextLoaded) {
+        if (Platform.OS === 'web') {
+          scrollSectionIntoViewWeb(nextLoaded);
+        } else {
+          scrollToSectionByRef(nextLoaded);
+        }
+      }
+      setTargetSectionToScroll(null);
+      return;
+    }
     if (hasMore && !loading) {
       sectionJumpFetchCountRef.current += 1;
       if (tab === 'artists') fetchMoreArtists();
@@ -658,7 +699,9 @@ export default function LibraryScreen() {
     }
   }, [
     targetSectionToScroll,
-    hasSectionInData,
+    hasTargetSectionInData,
+    findNextLoadedSection,
+    scrollSectionIntoViewWeb,
     scrollToSectionByRef,
     tab,
     hasMoreArtists,
@@ -671,27 +714,25 @@ export default function LibraryScreen() {
 
   const handleSectionPress = useCallback(
     (key: string) => {
+      const hasContent = getSectionItemCount(key) > 0;
       if (Platform.OS === 'web') {
-        const id = `${LIBRARY_SECTION_ID_PREFIX}${key}`;
-        const el = document.getElementById(id);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (hasContent && scrollSectionIntoViewWeb(key)) {
           return;
         }
+        const nextLoaded = findNextLoadedSection(key);
+        if (nextLoaded && scrollSectionIntoViewWeb(nextLoaded)) return;
         sectionJumpFetchCountRef.current = 0;
         setTargetSectionToScroll(key);
         return;
       }
       // Native: same behavior as web – locate section by ref and scroll to it (measure on tap)
-      if (scrollToSectionByRef(key)) return;
-      const idx = sectionKeys.indexOf(key);
-      for (let i = idx; i < sectionKeys.length; i++) {
-        if (scrollToSectionByRef(sectionKeys[i])) return;
-      }
+      if (hasContent && scrollToSectionByRef(key)) return;
+      const nextLoaded = findNextLoadedSection(key);
+      if (nextLoaded && scrollToSectionByRef(nextLoaded)) return;
       sectionJumpFetchCountRef.current = 0;
       setTargetSectionToScroll(key);
     },
-    [sectionKeys, scrollToSectionByRef]
+    [getSectionItemCount, findNextLoadedSection, scrollSectionIntoViewWeb, scrollToSectionByRef]
   );
 
   const contentAreaTop = 56 + insets.top;

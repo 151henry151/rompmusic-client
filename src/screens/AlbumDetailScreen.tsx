@@ -15,7 +15,6 @@ import ArtworkImage from '../components/ArtworkImage';
 import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
-import { getPrimaryArtistName } from '../utils/artistMerge';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
 
 type AlbumDetailParams = { albumId?: number; albumIds?: number[]; highlightTrackId?: number };
@@ -26,6 +25,15 @@ type RootStackParamList = {
 };
 
 const RELATED_ALBUM_SEARCH_LIMIT = 250;
+
+function isReleaseKeyCompatible(a: string, b: string): boolean {
+  const [aTitle, aYear] = a.split('|');
+  const [bTitle, bYear] = b.split('|');
+  if (aTitle !== bTitle) return false;
+  // Treat missing-year variants as the same release when title fingerprint matches.
+  if (!aYear || !bYear) return true;
+  return aYear === bYear;
+}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -153,7 +161,6 @@ export default function AlbumDetailScreen() {
         artwork_first: false,
       });
       if (!Array.isArray(candidates)) return [seed.id];
-      const seedPrimaryArtist = getPrimaryArtistName(seed.artist_name || 'Unknown').toLowerCase().trim();
       const seedReleaseKey = getBaseReleaseKey(seed.title, seed.year ?? null);
       const matchedIds = candidates
         .filter((candidate: { id: number; title?: string; year?: number | null; artwork_hash?: string | null; artist_name?: string }) => {
@@ -162,9 +169,7 @@ export default function AlbumDetailScreen() {
           if (seed.artwork_hash && candidate.artwork_hash && candidate.artwork_hash === seed.artwork_hash) return true;
           if (seed.artwork_hash) return false;
           const candidateReleaseKey = getBaseReleaseKey(candidate.title || '', candidate.year ?? null);
-          if (candidateReleaseKey !== seedReleaseKey) return false;
-          const candidatePrimaryArtist = getPrimaryArtistName(candidate.artist_name || 'Unknown').toLowerCase().trim();
-          return candidatePrimaryArtist === seedPrimaryArtist;
+          return isReleaseKeyCompatible(candidateReleaseKey, seedReleaseKey);
         })
         .map((candidate: { id: number }) => candidate.id);
       const ids = [...new Set([seed.id, ...matchedIds].map((id) => Number(id)).filter(Boolean))];
@@ -241,7 +246,7 @@ export default function AlbumDetailScreen() {
   const showAsSingleRelease = useMemo(() => {
     if (!isGrouped || albums.length <= 1) return false;
     const firstKey = getBaseReleaseKey(albums[0].title, albums[0].year);
-    return albums.every((a) => getBaseReleaseKey(a.title, a.year) === firstKey);
+    return albums.every((a) => isReleaseKeyCompatible(getBaseReleaseKey(a.title, a.year), firstKey));
   }, [isGrouped, albums]);
 
   /** Merge tracks from all editions. When same release, merge by (disc, track) slot so we show full tracklist even if editions share track ids. */

@@ -7,8 +7,6 @@
  * 2. Multi-disc albums (e.g. "GRRR! (Super Deluxe) (1)", "(2)", "(3)")
  */
 
-import { getPrimaryArtistName } from './artistMerge';
-
 export interface AlbumLike {
   id: number;
   title: string;
@@ -79,6 +77,21 @@ function normalizeTitleForGrouping(title: string): string {
   return stripEditionSuffix(stripDiscSuffix(title)).toLowerCase();
 }
 
+/** Infer release year from title text when metadata year is missing. */
+function inferYearFromTitle(title: string): number | null {
+  const match = title.match(/\b(19|20)\d{2}\b/);
+  if (!match) return null;
+  const year = Number(match[0]);
+  return Number.isFinite(year) ? year : null;
+}
+
+/** Prefer metadata year; fall back to title year like "Your Hit Parade 1942". */
+function normalizeReleaseYear(title: string, year?: number | null): number | null {
+  const parsedYear = Number(year);
+  if (Number.isFinite(parsedYear) && parsedYear > 0) return parsedYear;
+  return inferYearFromTitle(title);
+}
+
 /**
  * Get display title for a grouped album (without disc number suffix).
  */
@@ -86,30 +99,23 @@ export function getAlbumDisplayTitle(title: string): string {
   return stripDiscSuffix(title.trim());
 }
 
-/** Base title for merging groups: strip edition suffixes so "Always With Me (Deluxe)" matches "Always With Me". */
-function baseTitleForMerge(title: string): string {
-  return stripEditionSuffix(title).toLowerCase().trim();
-}
-
 /**
  * Key for "same release" detection: same base title (strip disc + edition) and year.
  * When multiple albums in a group share this key, show as one album (e.g. Doo-Bop with duplicate DB rows).
  */
 export function getBaseReleaseKey(title: string, year?: number | null): string {
-  return `${normalizeTitleForGrouping(title)}|${year ?? ''}`;
+  return `${normalizeTitleForGrouping(title)}|${normalizeReleaseYear(title, year) ?? ''}`;
 }
 
 /**
- * Group albums by same artwork when hash is set; otherwise by primary artist + title + year
- * so that collaboration variants (e.g. "All. Right. Now." by Satsang vs Satsang/G. Love) and
- * multi-artist same-title albums (e.g. "Amy") merge into one entry.
+ * Group albums by normalized release key (title + release year).
+ * This intentionally ignores per-track/guest-artist variance so compilation albums with
+ * mixed track artists stay as one release card instead of being split into false editions.
  */
 export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): AlbumGroup[] {
   const byKey = new Map<string, T[]>();
   for (const a of albums) {
-    const primaryArtist = getPrimaryArtistName(a.artist_name || 'Unknown').toLowerCase().trim() || '\0';
-    const collabKey = `${primaryArtist}|${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
-    const key = a.artwork_hash ?? `__collab:${collabKey}`;
+    const key = getBaseReleaseKey(a.title, a.year);
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(a);
   }
@@ -130,7 +136,6 @@ export function groupAlbumsByArtwork<T extends AlbumLike>(albums: T[]): AlbumGro
     };
   });
 
-  groups = mergeDuplicateAlbumTitles(groups);
   return deduplicateAlbumArtwork(groups);
 }
 
@@ -147,7 +152,7 @@ export function groupAlbums<T extends AlbumLike>(albums: T[]): {
 }[] {
   const byKey = new Map<string, T[]>();
   for (const a of albums) {
-    const key = `${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
+    const key = getBaseReleaseKey(a.title, a.year);
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(a);
   }
@@ -184,8 +189,7 @@ export type AlbumGroup = {
 export function groupAlbumsWithCollab<T extends AlbumLike>(albums: T[]): AlbumGroup[] {
   const byKey = new Map<string, T[]>();
   for (const a of albums) {
-    const primaryArtist = getPrimaryArtistName(a.artist_name || 'Unknown').toLowerCase().trim() || '\0';
-    const key = `${primaryArtist}|${normalizeTitleForGrouping(a.title)}|${a.year ?? ''}`;
+    const key = getBaseReleaseKey(a.title, a.year);
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(a);
   }
@@ -204,32 +208,7 @@ export function groupAlbumsWithCollab<T extends AlbumLike>(albums: T[]): AlbumGr
     };
   });
 
-  groups = mergeDuplicateAlbumTitles(groups);
   return deduplicateAlbumArtwork(groups);
-}
-
-function mergeDuplicateAlbumTitles(groups: AlbumGroup[]): AlbumGroup[] {
-  const byTitle = new Map<string, AlbumGroup>();
-  for (const g of groups) {
-    const primaryArtist = getPrimaryArtistName(g.artistNames || 'Unknown').toLowerCase().trim() || '\0';
-    const key = `${primaryArtist}|${baseTitleForMerge(g.displayTitle)}`;
-    const existing = byTitle.get(key);
-    if (existing) {
-      const allAlbums = [...existing.albums, ...g.albums];
-      const primaryAlbum = allAlbums.find((i) => i.has_artwork) ?? allAlbums[0];
-      const baseDisplayTitle = stripEditionSuffix(existing.displayTitle).trim();
-      byTitle.set(key, {
-        displayTitle: baseDisplayTitle,
-        albumIds: [...new Set([...existing.albumIds, ...g.albumIds])],
-        primaryAlbum,
-        albums: allAlbums,
-        artistNames: [...new Set([...(existing.artistNames?.split(', ') || []), ...(g.artistNames?.split(', ') || [])])].join(', '),
-      });
-    } else {
-      byTitle.set(key, { ...g, displayTitle: stripEditionSuffix(g.displayTitle).trim() });
-    }
-  }
-  return Array.from(byTitle.values());
 }
 
 function deduplicateAlbumArtwork(groups: AlbumGroup[]): AlbumGroup[] {

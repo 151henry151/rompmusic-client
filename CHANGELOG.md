@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Changes since last release will be listed here)
 
+### Changed
+
+- Increase library section-jump fetch retry budget so letter jumps can continue loading additional pages until the requested section is available.
+
+### Fixed
+
+- Require section-index jumps to scroll only to loaded sections and trigger pagination for unloaded sections instead of scrolling to empty placeholder headers.
+- Group album cards by normalized release key (title + release year, with title-year fallback) so same-edition compilations with mixed track artists are no longer split into separate albums.
+- Match album-detail related editions by compatible release keys so missing-year variants of the same release render as one track list instead of false edition splits.
+- Render an explicit startup loading screen while auth/server restoration is in progress instead of returning a blank root view.
+- Mark auth bootstrap as ready even when secure-storage token read/cleanup operations fail or time out so startup cannot get stuck behind `isReady = false`.
+- Restore server URL, auth session, and settings before non-critical audio initialization so Android startup rendering is not blocked by audio stack setup.
+
 ## [0.1.10] - 2026-03-07
 
 ### Added

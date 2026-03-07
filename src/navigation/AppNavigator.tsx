@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { IconButton } from 'react-native-paper';
 
 import LoginScreen from '../screens/LoginScreen';
@@ -40,6 +40,17 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  startupGate: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  startupGateText: {
+    color: '#888',
+    fontSize: 14,
   },
 });
 
@@ -136,7 +147,14 @@ export default function AppNavigator() {
   const isServerRestored = useServerStore((s) => s.isRestored);
   const serverUrl = useServerStore((s) => s.serverUrl);
 
-  if (!isReady || !isServerRestored) return null;
+  if (!isReady || !isServerRestored) {
+    return (
+      <View style={styles.startupGate}>
+        <ActivityIndicator size="small" color="#4a9eff" />
+        <Text style={styles.startupGateText}>Starting RompMusic…</Text>
+      </View>
+    );
+  }
 
   const hasConfiguredServer = Boolean(serverUrl) || (
     Platform.OS === 'web' && Boolean(process.env.EXPO_PUBLIC_API_URL)

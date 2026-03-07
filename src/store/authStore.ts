@@ -35,6 +35,17 @@ interface AuthState {
 
 const TOKEN_KEY = 'rompmusic_token';
 const useSecureStore = Platform.OS !== 'web';
+const STORAGE_TIMEOUT_MS = 4000;
+const SESSION_VALIDATE_TIMEOUT_MS = 7000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
 
 async function getStoredToken(): Promise<string | null> {
   if (useSecureStore) {
@@ -135,17 +146,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   restoreSession: async () => {
     try {
-      const token = await getStoredToken();
+      const token = await withTimeout(getStoredToken(), STORAGE_TIMEOUT_MS, 'Reading stored auth token');
       if (token) {
         setToken(token);
-        const user = await api.getMe();
-        set({ user, token, isReady: true });
+        const user = await withTimeout(api.getMe(), SESSION_VALIDATE_TIMEOUT_MS, 'Validating stored session');
+        set({ user, token });
       } else {
-        set({ isReady: true });
+        set({ user: null, token: null });
       }
     } catch {
-      await setStoredToken(null);
-      set({ user: null, token: null, isReady: true });
+      try {
+        await withTimeout(setStoredToken(null), STORAGE_TIMEOUT_MS, 'Clearing invalid stored auth token');
+      } catch {
+        // Ignore cleanup failures and still allow app bootstrap to continue.
+      }
+      setToken(null);
+      set({ user: null, token: null });
+    } finally {
+      // Never block root navigation on auth restore failures/timeouts.
+      set({ isReady: true });
     }
   },
 }));

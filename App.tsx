@@ -27,32 +27,30 @@ function AppContent() {
   const restoreSettings = useSettingsStore((s) => s.restoreSettings);
 
   useEffect(() => {
+    const runTask = async (label: string, task: () => Promise<void>, timeoutMs = 8000) => {
+      try {
+        await Promise.race([
+          task(),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ]);
+      } catch (error) {
+        console.error(`${label} failed`, error);
+      }
+    };
+
     (async () => {
-      try {
-        await initAndroidTrackPlayer();
-      } catch (error) {
-        console.error('Android TrackPlayer initialization failed', error);
-      }
-      try {
-        await initAudio();
-      } catch (error) {
-        console.error('Audio initialization failed', error);
-      }
-      try {
-        await restoreServerUrl();
-      } catch (error) {
-        console.error('Server URL restoration failed', error);
-      }
-      try {
-        await restoreSession();
-      } catch (error) {
-        console.error('Session restoration failed', error);
-      }
-      try {
-        await restoreSettings();
-      } catch (error) {
-        console.error('Settings restoration failed', error);
-      }
+      // Restore persisted app state first so navigation can render promptly.
+      await Promise.allSettled([
+        runTask('Server URL restoration', restoreServerUrl, 5000),
+        runTask('Session restoration', restoreSession, 9000),
+        runTask('Settings restoration', restoreSettings, 5000),
+      ]);
+
+      // Audio stack initialization should never block initial app render.
+      void runTask('Android TrackPlayer initialization', initAndroidTrackPlayer);
+      void runTask('Audio initialization', initAudio);
     })();
   }, [restoreServerUrl, restoreSession, restoreSettings]);
 
