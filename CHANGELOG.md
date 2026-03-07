@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Increment `expo.android.versionCode` from `5` to `6` for production Android build metadata.
+- Increment `expo.android.versionCode` from `6` to `7` for production Android build metadata.
+- Exclude `react-native-track-player` from Expo Doctor React Native Directory validation because Android New Architecture is intentionally disabled in this app configuration.
 
 ## [0.1.9] - 2026-03-06
 
