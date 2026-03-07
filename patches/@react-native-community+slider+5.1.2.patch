@@ -1,0 +1,16 @@
+diff --git a/node_modules/@react-native-community/slider/ios/RNCSliderComponentView.mm b/node_modules/@react-native-community/slider/ios/RNCSliderComponentView.mm
+index 81487b1..cf77c37 100644
+--- a/node_modules/@react-native-community/slider/ios/RNCSliderComponentView.mm
++++ b/node_modules/@react-native-community/slider/ios/RNCSliderComponentView.mm
+@@ -1,3 +1,5 @@
++#if RCT_NEW_ARCH_ENABLED
++
+ #import "RNCSliderComponentView.h"
+ 
+ #import <React/RCTConversions.h>
+@@ -304,3 +306,5 @@ Class<RCTComponentViewProtocol> RNCSliderCls(void)
+ {
+     return RNCSliderComponentView.class;
+ }
++
++#endif // RCT_NEW_ARCH_ENABLED

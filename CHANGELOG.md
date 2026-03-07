@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - (Changes since last release will be listed here)
+- Add `ios-simulator` EAS profile for development-client iOS simulator builds.
+- Add `expo-dev-client` dependency required for EAS development-client builds.
 
 ### Changed
 
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Increment `expo.android.versionCode` from `6` to `7` for production Android build metadata.
 - Increment `expo.android.versionCode` from `7` to `8` for production Android build metadata.
 - Exclude `react-native-track-player` from Expo Doctor React Native Directory validation because Android New Architecture is intentionally disabled in this app configuration.
+- Exclude `@react-native-community/slider` from Expo install version validation to allow iOS-compatible slider updates on SDK 54.
+
+### Fixed
+
+- Patch `@react-native-community/slider` iOS Fabric component source to compile only when `RCT_NEW_ARCH_ENABLED` is enabled, avoiding missing `RNCSliderComponentDescriptor` headers on old-architecture builds.
 
 ## [0.1.9] - 2026-03-06
 
