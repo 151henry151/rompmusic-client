@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Add Dockerfile build args for `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_WEB_BASE_URL` to support demo vs production web builds.
 - Increase library section-jump fetch retry budget so letter jumps can continue loading additional pages until the requested section is available.
 
 ### Fixed
