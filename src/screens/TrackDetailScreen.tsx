@@ -63,8 +63,7 @@ export default function TrackDetailScreen() {
   }
 
   const handlePlay = async () => {
-    const tracks = await api.getTracks({ album_id: track.album_id });
-    await playTrack(track, tracks);
+    await playTrack(track, [track]);
   };
 
   const handleViewAlbum = () => {

@@ -9,7 +9,7 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
-import type { AddTrack } from 'react-native-track-player';
+import { trackPlayerModule, type AddTrack } from '../services/trackPlayerBindings';
 import { api } from '../api/client';
 import { getToken } from '../api/client';
 import { useSettingsStore } from './settingsStore';
@@ -138,16 +138,6 @@ const activePlayers = new Set<AudioPlayer>();
 let suppressRemoteSkipDetectionUntil = 0;
 let remoteSkipInFlight = false;
 let onAppActiveInFlight = false;
-type TrackPlayerModule = typeof import('react-native-track-player');
-const trackPlayerModule: TrackPlayerModule | null = Platform.OS === 'android'
-  ? (() => {
-      try {
-        return require('react-native-track-player') as TrackPlayerModule;
-      } catch {
-        return null;
-      }
-    })()
-  : null;
 const TrackPlayer: any = trackPlayerModule?.default;
 const TrackPlayerEvent: any = trackPlayerModule?.Event;
 const TrackPlayerState: any = trackPlayerModule?.State;
@@ -566,12 +556,6 @@ function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null):
   } catch {
     /* ignore lock-screen metadata failures so queue playback keeps running */
   }
-  setActive.call(player, true, {
-    title: track.title,
-    artist: track.artist_name || 'Unknown',
-    albumTitle: track.album_title || '',
-    artworkUrl: api.getArtworkUrl('album', track.album_id),
-  });
 }
 
 /** Call play(); if not loaded yet, call again when isLoaded (keeps preload, no extra request). */

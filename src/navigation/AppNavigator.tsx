@@ -58,6 +58,31 @@ const styles = StyleSheet.create({
   },
 });
 
+/** Back button that works after reload: go back if possible, else go to app home. */
+function headerBackButton() {
+  return ({ navigation }: { navigation: { canGoBack?: () => boolean; goBack: () => void; navigate: (name: string) => void } }) => {
+    const webBasePath = Platform.OS === 'web' ? getWebBasePath() : 'app';
+    return {
+      headerLeft: () => (
+        <IconButton
+          icon="arrow-left"
+          iconColor="#fff"
+          onPress={() => {
+            if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+              navigation.goBack();
+            } else if (Platform.OS === 'web' && typeof window !== 'undefined') {
+              window.location.href = `${window.location.origin}/${webBasePath}`;
+            } else {
+              navigation.navigate('Library');
+            }
+          }}
+          accessibilityLabel="Back"
+        />
+      ),
+    };
+  };
+}
+
 function AuthenticatedLayout() {
   const insets = useSafeAreaInsets();
   const [showPlayer, setShowPlayer] = React.useState(false);
@@ -90,17 +115,37 @@ function AuthenticatedLayout() {
         <AppStack.Screen
           name="Playlists"
           component={PlaylistsScreen}
-          options={{ headerShown: true, headerTitle: 'Playlists', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: 'Playlists',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            ...headerBackButton()({ navigation }),
+          })}
         />
         <AppStack.Screen
           name="PlaylistDetail"
           component={PlaylistDetailScreen}
-          options={{ headerShown: true, headerTitle: 'Playlist', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: 'Playlist',
+            headerBackTitle: 'Back',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            ...headerBackButton()({ navigation }),
+          })}
         />
         <AppStack.Screen
           name="PlaylistEdit"
           component={PlaylistEditScreen}
-          options={{ headerShown: true, headerTitle: 'Edit playlist', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: 'Edit playlist',
+            headerBackTitle: 'Back',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            ...headerBackButton()({ navigation }),
+          })}
         />
         <AppStack.Screen
           name="AddToPlaylistModal"
@@ -124,30 +169,44 @@ function AuthenticatedLayout() {
             headerTitle: 'Settings',
             headerStyle: { backgroundColor: '#0a0a0a' },
             headerTintColor: '#fff',
-            headerLeft: () => (
-              <IconButton
-                icon="arrow-left"
-                iconColor="#fff"
-                onPress={() => navigation.goBack()}
-                accessibilityLabel="Back"
-              />
-            ),
+            ...headerBackButton()({ navigation }),
           })}
         />
         <AppStack.Screen
           name="ArtistDetail"
           component={ArtistDetailScreen}
-          options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: '',
+            headerBackTitle: 'Back',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            ...headerBackButton()({ navigation }),
+          })}
         />
         <AppStack.Screen
           name="AlbumDetail"
           component={AlbumDetailScreen}
-          options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: '',
+            headerBackTitle: 'Back',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            ...headerBackButton()({ navigation }),
+          })}
         />
         <AppStack.Screen
           name="TrackDetail"
           component={TrackDetailScreen}
-          options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+          options={({ navigation }) => ({
+            headerShown: true,
+            headerTitle: '',
+            headerBackTitle: 'Back',
+            headerStyle: { backgroundColor: '#0a0a0a' },
+            headerTintColor: '#fff',
+            ...headerBackButton()({ navigation }),
+          })}
         />
         <AppStack.Screen
           name="ForgotPassword"

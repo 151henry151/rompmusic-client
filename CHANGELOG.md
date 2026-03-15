@@ -9,15 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- (Changes since last release will be listed here)
+- Add platform-specific stubs (`trackPlayerBindings.web.ts`, `androidTrackPlayer.web.ts`) so `react-native-track-player` is not bundled for web builds.
 
 ### Changed
 
-- (Changes since last release will be listed here)
+- On track detail screen, Play button queues only that track; album page play still queues the rest of the album.
+- Show back button on detail and playlist screens after reload; on web when there is no history, navigate to app home.
 
 ### Fixed
 
-- (Changes since last release will be listed here)
+- Remove duplicate `setActive` call in `setLockScreenMetadata` that caused "setActive is not defined" on web.
 
 ## [0.1.11] - 2026-03-14
 

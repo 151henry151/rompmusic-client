@@ -21,7 +21,8 @@
         "UIBackgroundModes": [
           "audio"
         ]
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "icon": "./assets/icon-android-padded.png",
@@ -35,7 +36,7 @@
       "permissions": [
         "android.permission.WAKE_LOCK"
       ],
-      "versionCode": 9
+      "versionCode": 10
     },
     "web": {
       "favicon": "./assets/favicon.png"
