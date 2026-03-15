@@ -166,25 +166,49 @@ export const api = {
     return fetchApi('/playlists');
   },
 
+  async createPlaylist(data: { name: string; description?: string | null }) {
+    return fetchApi('/playlists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   async getPlaylist(id: number) {
     return fetchApi(`/playlists/${id}`);
   },
 
-  async getPlaylistTracks(id: number) {
-    return fetchApi(`/playlists/${id}/tracks`);
-  },
-
-  async createPlaylist(name: string, description?: string) {
-    return fetchApi('/playlists', {
-      method: 'POST',
-      body: JSON.stringify({ name, description, is_public: false }),
+  async updatePlaylist(id: number, data: { name?: string; description?: string | null }) {
+    return fetchApi(`/playlists/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     });
   },
 
-  async addTrackToPlaylist(playlistId: number, trackId: number) {
+  async deletePlaylist(id: number) {
+    await fetchApi(`/playlists/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async addTrackToPlaylist(playlistId: number, trackId: number, position?: number) {
+    const payload: { track_id: number; position?: number } = { track_id: trackId };
+    if (position != null) payload.position = position;
     return fetchApi(`/playlists/${playlistId}/tracks`, {
       method: 'POST',
-      body: JSON.stringify({ track_id: trackId }),
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async removeTrackFromPlaylist(playlistId: number, trackId: number) {
+    return fetchApi(`/playlists/${playlistId}/tracks/${trackId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async reorderPlaylistTracks(playlistId: number, trackIds: number[]) {
+    return fetchApi(`/playlists/${playlistId}/tracks/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ track_ids: trackIds }),
     });
   },
 };

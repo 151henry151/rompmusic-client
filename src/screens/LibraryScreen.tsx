@@ -937,6 +937,12 @@ export default function LibraryScreen() {
                 iconColor="#888"
                 accessibilityLabel="Play history"
               />
+              <IconButton
+                icon="playlist-music"
+                onPress={() => navigation.navigate('Playlists')}
+                iconColor="#888"
+                accessibilityLabel="Playlists"
+              />
               {!user ? (
                 <View style={styles.authWrap}>
                   <Button
@@ -1054,6 +1060,12 @@ export default function LibraryScreen() {
                 onPress={() => navigation.navigate('History')}
                 iconColor="#888"
                 accessibilityLabel="Play history"
+              />
+              <IconButton
+                icon="playlist-music"
+                onPress={() => navigation.navigate('Playlists')}
+                iconColor="#888"
+                accessibilityLabel="Playlists"
               />
               <IconButton
                 icon="cog"

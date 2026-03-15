@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- (Changes since last release will be listed here)
+### Added
+
+- Add `playlistService` typed API wrappers for playlist list/create/get/update/delete/add-track/remove-track/reorder operations.
+- Add `playlistStore` Zustand state/actions for playlist list/detail loading, playlist mutations, and track-order mutations.
+- Add Playlists, PlaylistDetail, PlaylistEdit, and AddToPlaylist modal screens and wire routes into app navigation.
+- Add Add-to-playlist modal UI flow from album and track actions, including create-new-playlist from the modal.
+
+### Changed
+
+- Update library header actions to include direct navigation to playlists.
+- Update album track option menus to include “Add to playlist”.
+- Update playlist-detail delete behavior on web to use browser confirm before delete request.
 
 ## [0.1.0-beta.8] - 2026-02-23
 
