@@ -24,6 +24,10 @@ import PlayerScreen from '../screens/PlayerScreen';
 import ArtistDetailScreen from '../screens/ArtistDetailScreen';
 import AlbumDetailScreen from '../screens/AlbumDetailScreen';
 import TrackDetailScreen from '../screens/TrackDetailScreen';
+import PlaylistsScreen from '../screens/PlaylistsScreen';
+import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
+import PlaylistEditScreen from '../screens/PlaylistEditScreen';
+import AddToPlaylistModalScreen from '../screens/AddToPlaylistModalScreen';
 import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore, type Track } from '../store/playerStore';
@@ -83,6 +87,30 @@ function AuthenticatedLayout() {
         }}
       >
         <AppStack.Screen name="Library" component={LibraryScreen} />
+        <AppStack.Screen
+          name="Playlists"
+          component={PlaylistsScreen}
+          options={{ headerShown: true, headerTitle: 'Playlists', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+        <AppStack.Screen
+          name="PlaylistDetail"
+          component={PlaylistDetailScreen}
+          options={{ headerShown: true, headerTitle: 'Playlist', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+        <AppStack.Screen
+          name="PlaylistEdit"
+          component={PlaylistEditScreen}
+          options={{ headerShown: true, headerTitle: 'Edit playlist', headerBackTitle: 'Back', headerStyle: { backgroundColor: '#0a0a0a' }, headerTintColor: '#fff' }}
+        />
+        <AppStack.Screen
+          name="AddToPlaylistModal"
+          component={AddToPlaylistModalScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            contentStyle: { backgroundColor: 'rgba(0,0,0,0.3)' },
+          }}
+        />
         <AppStack.Screen
           name="History"
           component={HistoryScreen}
@@ -171,11 +199,15 @@ export default function AppNavigator() {
         path: '',
         screens: {
           Library: '',
+          Playlists: 'playlists',
+          PlaylistDetail: 'playlist/:playlistId',
+          PlaylistEdit: 'playlist/:playlistId/edit',
           History: 'history',
           Settings: 'settings',
           ArtistDetail: 'artist/:artistIds',
           AlbumDetail: 'album/:albumId',
           TrackDetail: 'track/:trackId',
+          AddToPlaylistModal: 'track/:trackId/add-to-playlist',
         },
       },
       Login: 'login',

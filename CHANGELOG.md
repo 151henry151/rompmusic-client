@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- (Changes since last release will be listed here)
+
+### Fixed
+
+- (Changes since last release will be listed here)
+
+## [0.1.11] - 2026-03-14
+
+### Added
+
+- Add per-user playlists: create, rename, reorder, delete playlists; add and remove tracks; play playlist from library or track/album context.
+
+### Changed
+
 - Add Dockerfile build args for `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_WEB_BASE_URL` to support demo vs production web builds.
 - Increase library section-jump fetch retry budget so letter jumps can continue loading additional pages until the requested section is available.
 
@@ -222,7 +236,8 @@ First beta release. Part of RompMusic 0.1.0-beta.1.
 - Add Library, Search, and Player screens.
 - Add JWT authentication.
 
-[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/151henry151/rompmusic-client/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.11
 [0.1.10]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.10
 [0.1.9]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.9
 [0.1.8]: https://github.com/151henry151/rompmusic-client/releases/tag/v0.1.8

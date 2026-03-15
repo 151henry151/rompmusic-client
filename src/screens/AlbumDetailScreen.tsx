@@ -22,6 +22,7 @@ type RootStackParamList = {
   AlbumDetail: AlbumDetailParams;
   TrackDetail: { trackId: number };
   ArtistDetail: { artistId?: number; artistIds?: number[]; artistName: string };
+  AddToPlaylistModal: { trackId: number };
 };
 
 const RELATED_ALBUM_SEARCH_LIMIT = 250;
@@ -76,6 +77,7 @@ function TrackRow({
   addToQueue,
   playNext,
   onShare,
+  onAddToPlaylist,
 }: {
   track: Track & { album_title?: string; artist_name?: string };
   albumId: number;
@@ -85,6 +87,7 @@ function TrackRow({
   addToQueue: (t: Track | Track[]) => void;
   playNext: (t: Track | Track[]) => void;
   onShare?: (t: Track & { album_title?: string; artist_name?: string }) => void;
+  onAddToPlaylist?: (t: Track & { album_title?: string; artist_name?: string }) => void;
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
   return (
@@ -102,6 +105,9 @@ function TrackRow({
           >
             <Menu.Item onPress={() => { addToQueue(track); setMenuVisible(false); }} title="Add to queue" leadingIcon="playlist-plus" />
             <Menu.Item onPress={() => { playNext(track); setMenuVisible(false); }} title="Play next" leadingIcon="play-circle" />
+            {onAddToPlaylist && (
+              <Menu.Item onPress={() => { onAddToPlaylist(track); setMenuVisible(false); }} title="Add to playlist" leadingIcon="playlist-music" />
+            )}
             {onShare && (
               <Menu.Item onPress={() => { onShare(track); setMenuVisible(false); }} title="Share" leadingIcon="share-variant" />
             )}
@@ -375,6 +381,10 @@ export default function AlbumDetailScreen() {
     }
   }, [getTrackUrl, copyToClipboardAndNotify]);
 
+  const handleAddToPlaylist = useCallback((track: Track & { album_title?: string; artist_name?: string }) => {
+    navigation.navigate('AddToPlaylistModal', { trackId: track.id });
+  }, [navigation]);
+
   if (effectiveAlbumIds.length === 0) {
     return (
       <View style={styles.container}>
@@ -521,6 +531,7 @@ export default function AlbumDetailScreen() {
                           addToQueue={addToQueue}
                           playNext={playNext}
                           onShare={handleShareTrack}
+                          onAddToPlaylist={handleAddToPlaylist}
                         />
                       );
                     })
@@ -528,34 +539,35 @@ export default function AlbumDetailScreen() {
                 </View>
               );
             })}
-          </>
-        ) : (
-          <>
-            <Text variant="titleSmall" style={styles.section}>
-              Tracks
-            </Text>
-            {tracksLoading ? (
-              <Text style={styles.muted}>Loading tracks...</Text>
-            ) : (
-              mergedTracks.map((t) => {
-                const isHighlighted = highlightTrackId === t.id;
-                return (
-                  <TrackRow
-                    key={t.id}
-                    track={t}
-                    albumId={t.album_id}
-                    isHighlighted={isHighlighted}
-                    onPlay={() => handlePlayTrack(t, mergedTracks)}
-                    onPress={() => handleTrackPress(t)}
-                    addToQueue={addToQueue}
-                    playNext={playNext}
-                    onShare={handleShareTrack}
-                  />
-                );
-              })
-            )}
-          </>
-        )}
+        </>
+      ) : (
+        <>
+          <Text variant="titleSmall" style={styles.section}>
+            Tracks
+          </Text>
+          {tracksLoading ? (
+            <Text style={styles.muted}>Loading tracks...</Text>
+          ) : (
+            mergedTracks.map((t) => {
+              const isHighlighted = highlightTrackId === t.id;
+              return (
+                <TrackRow
+                  key={t.id}
+                  track={t}
+                  albumId={t.album_id}
+                  isHighlighted={isHighlighted}
+                  onPlay={() => handlePlayTrack(t, mergedTracks)}
+                  onPress={() => handleTrackPress(t)}
+                  addToQueue={addToQueue}
+                  playNext={playNext}
+                  onShare={handleShareTrack}
+                  onAddToPlaylist={handleAddToPlaylist}
+                />
+              );
+            })
+          )}
+        </>
+      )}
       </ScrollView>
       <ZoomableArtworkModal
         visible={artworkModalVisible}

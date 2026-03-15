@@ -19,6 +19,7 @@ type RootStackParamList = {
   TrackDetail: TrackDetailParams;
   AlbumDetail: { albumId: number; albumIds?: number[]; highlightTrackId?: number };
   ArtistDetail: { artistIds: number[]; artistName: string };
+  AddToPlaylistModal: { trackId: number };
 };
 
 function formatDuration(seconds: number): string {
@@ -143,6 +144,14 @@ export default function TrackDetailScreen() {
         </Button>
         <Button mode="outlined" onPress={() => addToQueue(track)} style={styles.albumButton} icon="playlist-plus">
           Add to queue
+        </Button>
+        <Button
+          mode="outlined"
+          onPress={() => navigation.navigate('AddToPlaylistModal', { trackId: track.id })}
+          style={styles.albumButton}
+          icon="playlist-music"
+        >
+          Add to playlist
         </Button>
         <Button mode="outlined" onPress={() => playNext(track)} style={styles.albumButton} icon="play-circle">
           Play next

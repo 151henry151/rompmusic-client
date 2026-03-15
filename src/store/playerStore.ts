@@ -566,6 +566,12 @@ function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null):
   } catch {
     /* ignore lock-screen metadata failures so queue playback keeps running */
   }
+  setActive.call(player, true, {
+    title: track.title,
+    artist: track.artist_name || 'Unknown',
+    albumTitle: track.album_title || '',
+    artworkUrl: api.getArtworkUrl('album', track.album_id),
+  });
 }
 
 /** Call play(); if not loaded yet, call again when isLoaded (keeps preload, no extra request). */
