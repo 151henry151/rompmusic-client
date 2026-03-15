@@ -56,7 +56,7 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
     if (Platform.OS === 'web') {
       return (
         <div
-          ref={containerRef as React.RefObject<HTMLDivElement>}
+          ref={containerRef as unknown as React.RefObject<HTMLDivElement>}
           style={{
             width: size,
             height: size,

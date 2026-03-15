@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update library header actions to include direct navigation to playlists.
 - Update album track option menus to include “Add to playlist”.
 - Update playlist-detail delete behavior on web to use browser confirm before delete request.
+- Update web artwork ref typing and player lock-screen metadata fallback values to satisfy strict TypeScript compilation.
+- Remove unsupported `dataSet` prop from the library container view for React Native type compatibility.
 
 ## [0.1.0-beta.8] - 2026-02-23
 

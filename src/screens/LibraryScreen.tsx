@@ -910,7 +910,7 @@ export default function LibraryScreen() {
   const isNarrow = windowWidth < MOBILE_BREAKPOINT;
   const headerHeight = (isNarrow ? 56 + 52 : 56) + insets.top;
   return (
-    <View style={styles.container} dataSet={{ buildLabel: '2026-02-18-editions-noart' }}>
+    <View style={styles.container}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }, isNarrow && styles.stickyHeaderNarrow]}>
         {isNarrow ? (
           <>

@@ -183,7 +183,7 @@ function setLockScreenMetadata(player: AudioPlayer | null, track: Track | null):
   setActive.call(player, true, {
     title: track.title,
     artist: track.artist_name || 'Unknown',
-    albumTitle: track.album_title,
+    albumTitle: track.album_title || '',
     artworkUrl: api.getArtworkUrl('album', track.album_id),
   });
 }
