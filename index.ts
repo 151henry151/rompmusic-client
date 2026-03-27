@@ -10,9 +10,10 @@ import { androidPlaybackService } from './src/services/androidTrackPlayer';
 if (Platform.OS === 'android') {
   try {
     const TrackPlayer = require('react-native-track-player').default as {
-      registerPlaybackService: (serviceFactory: () => Promise<void>) => void;
+      /** Factory must return the async service function (not invoke it). */
+      registerPlaybackService: (serviceFactory: () => () => Promise<void>) => void;
     };
-    TrackPlayer.registerPlaybackService(androidPlaybackService);
+    TrackPlayer.registerPlaybackService(() => androidPlaybackService);
   } catch {
     // Expo Go iOS/Android does not include this native module.
   }

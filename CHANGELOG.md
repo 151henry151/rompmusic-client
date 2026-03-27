@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-03-27
+
 ### Added
 
 - Add platform-specific stubs (`trackPlayerBindings.web.ts`, `androidTrackPlayer.web.ts`) so `react-native-track-player` is not bundled for web builds.
@@ -18,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Register `react-native-track-player` playback service with `() => androidPlaybackService` so the headless task receives a function (avoids `TypeError: Object is not a function` in `startHeadlessTask` and the Android "keeps stopping" dialog).
 - Remove duplicate `setActive` call in `setLockScreenMetadata` that caused "setActive is not defined" on web.
 
 ## [0.1.11] - 2026-03-14

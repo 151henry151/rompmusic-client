@@ -174,9 +174,9 @@ export async function androidPlaybackService(): Promise<void> {
 export function registerAndroidPlaybackService(): void {
   try {
     const TrackPlayer = require('react-native-track-player').default as {
-      registerPlaybackService: (serviceFactory: () => Promise<void>) => void;
+      registerPlaybackService: (serviceFactory: () => () => Promise<void>) => void;
     };
-    TrackPlayer.registerPlaybackService(androidPlaybackService);
+    TrackPlayer.registerPlaybackService(() => androidPlaybackService);
   } catch {
     // Expo Go does not include this native module.
   }
