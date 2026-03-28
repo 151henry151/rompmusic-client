@@ -28,6 +28,7 @@ import PlaylistsScreen from '../screens/PlaylistsScreen';
 import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
 import PlaylistEditScreen from '../screens/PlaylistEditScreen';
 import AddToPlaylistModalScreen from '../screens/AddToPlaylistModalScreen';
+import OfflineLibraryScreen from '../screens/OfflineLibraryScreen';
 import MiniPlayer from '../components/MiniPlayer';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore, type Track } from '../store/playerStore';
@@ -112,6 +113,11 @@ function AuthenticatedLayout() {
         }}
       >
         <AppStack.Screen name="Library" component={LibraryScreen} />
+        <AppStack.Screen
+          name="OfflineLibrary"
+          component={OfflineLibraryScreen}
+          options={{ headerShown: false, title: 'Offline Library' }}
+        />
         <AppStack.Screen
           name="Playlists"
           component={PlaylistsScreen}

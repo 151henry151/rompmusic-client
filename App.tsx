@@ -16,6 +16,7 @@ import { useAuthStore } from './src/store/authStore';
 import { usePlayerStore } from './src/store/playerStore';
 import { useServerStore } from './src/store/serverStore';
 import { useSettingsStore } from './src/store/settingsStore';
+import { useOfflineStore } from './src/store/offlineStore';
 import { initAudio } from './src/services/audioService';
 import { initAndroidTrackPlayer } from './src/services/androidTrackPlayer';
 
@@ -51,6 +52,10 @@ function AppContent() {
       // Audio stack initialization should never block initial app render.
       void runTask('Android TrackPlayer initialization', initAndroidTrackPlayer);
       void runTask('Audio initialization', initAudio);
+
+      // Hydrate offline store and begin background library caching.
+      void runTask('Offline store hydration', () => useOfflineStore.getState().hydrate());
+      void runTask('Library metadata caching', () => useOfflineStore.getState().cacheLibraryMetadata(), 120000);
     })();
   }, [restoreServerUrl, restoreSession, restoreSettings]);
 

@@ -18,6 +18,7 @@ export type RootStackParamList = {
 /** In-app stack (inside App): Library, Settings, History, ArtistDetail, AlbumDetail, TrackDetail, ForgotPassword, ResetPassword */
 export type AppStackParamList = {
   Library: undefined;
+  OfflineLibrary: undefined;
   Playlists: undefined;
   PlaylistDetail: { playlistId: number };
   PlaylistEdit: { playlistId: number };

@@ -13,6 +13,7 @@ import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
 import ZoomableArtworkModal from '../components/ZoomableArtworkModal';
+import { TrackDownloadButton, AlbumDownloadButton } from '../components/DownloadButton';
 import type { Track } from '../store/playerStore';
 import { getAlbumDisplayTitle, getBaseReleaseKey } from '../utils/albumGrouping';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
@@ -98,6 +99,7 @@ function TrackRow({
       right={() => (
         <View style={styles.trackActions}>
           <IconButton icon="play" onPress={onPlay} accessibilityLabel={`Play ${track.title}`} />
+          <TrackDownloadButton track={track as import('../store/offlineStore').OfflineTrack} size={20} />
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
@@ -471,6 +473,7 @@ export default function AlbumDetailScreen() {
               <Button mode="outlined" compact onPress={handleShare} style={styles.shareActionBtn} icon="share-variant">
                 Share
               </Button>
+              <AlbumDownloadButton albumId={primaryAlbumId} />
             </View>
           </View>
         )}
