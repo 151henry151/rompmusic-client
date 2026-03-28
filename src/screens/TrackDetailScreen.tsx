@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { usePlayerStore } from '../store/playerStore';
 import ArtworkImage from '../components/ArtworkImage';
+import { TrackDownloadButton } from '../components/DownloadButton';
 import { buildPublicPath } from '../utils/publicWebsiteUrl';
 
 type TrackDetailParams = { trackId: number };
@@ -159,6 +160,7 @@ export default function TrackDetailScreen() {
         <Button mode="outlined" onPress={() => playNext(track)} style={styles.albumButton} icon="play-circle">
           Play next
         </Button>
+        <TrackDownloadButton track={track as import('../store/offlineStore').OfflineTrack} size={24} />
         <Button mode="outlined" onPress={handleViewAlbum} style={styles.albumButton} icon="album">
           View album
         </Button>

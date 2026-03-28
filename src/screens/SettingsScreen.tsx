@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useServerStore, normalizeServerUrl, isInsecureRemoteHttpUrl } from '../store/serverStore';
+import { useOfflineStore } from '../store/offlineStore';
 import { getWebsiteBaseUrl } from '../utils/publicWebsiteUrl';
 
 
@@ -208,6 +209,44 @@ export default function SettingsScreen() {
           <Menu.Item onPress={() => { setStreamFormat('original'); setAudioMenuVisible(false); }} title="Original format" />
           <Menu.Item onPress={() => { setStreamFormat('ogg'); setAudioMenuVisible(false); }} title="OGG (transcoded)" />
         </Menu>
+      )}
+
+      {Platform.OS !== 'web' && (
+        <>
+          <Text variant="titleSmall" style={styles.section}>
+            Offline Storage
+          </Text>
+          <List.Item
+            title="Offline Library"
+            description="View downloaded and recently played songs"
+            left={() => <List.Icon icon="download" />}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            onPress={() => navigation.navigate('OfflineLibrary')}
+            style={styles.item}
+            accessibilityRole="button"
+          />
+          <List.Item
+            title="Clear all downloads"
+            description="Remove all downloaded songs from this device"
+            left={() => <List.Icon icon="delete" />}
+            onPress={() => {
+              Alert.alert(
+                'Clear downloads',
+                'Remove all downloaded songs from this device? This cannot be undone.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Clear',
+                    style: 'destructive',
+                    onPress: () => useOfflineStore.getState().clearAllDownloads(),
+                  },
+                ]
+              );
+            }}
+            style={styles.item}
+            accessibilityRole="button"
+          />
+        </>
       )}
 
       <Text variant="titleSmall" style={styles.section}>

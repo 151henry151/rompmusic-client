@@ -18,6 +18,7 @@ import { groupArtistsByNormalizedName, groupArtistsByPrimaryName } from '../util
 import { groupAlbumsByArtwork } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAuthStore } from '../store/authStore';
+import { useOfflineStore } from '../store/offlineStore';
 import type { AppStackParamList } from '../navigation/types';
 import { getWebBasePath } from '../utils/webBasePath';
 
@@ -1136,6 +1137,14 @@ export default function LibraryScreen() {
               <View style={styles.tabDropdownWrap}>
                 {renderTabMenu()}
               </View>
+              {Platform.OS !== 'web' && (
+                <IconButton
+                  icon="download"
+                  onPress={() => navigation.navigate('OfflineLibrary')}
+                  iconColor="#888"
+                  accessibilityLabel="Offline library"
+                />
+              )}
               <IconButton
                 icon="clock-outline"
                 onPress={() => navigation.navigate('History')}
@@ -1259,6 +1268,14 @@ export default function LibraryScreen() {
                     Register
                   </Button>
                 </View>
+              )}
+              {Platform.OS !== 'web' && (
+                <IconButton
+                  icon="download"
+                  onPress={() => navigation.navigate('OfflineLibrary')}
+                  iconColor="#888"
+                  accessibilityLabel="Offline library"
+                />
               )}
               <IconButton
                 icon="clock-outline"

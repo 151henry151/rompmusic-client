@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Image, View, Text, StyleSheet, Platform } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { useAuthStore } from '../store/authStore';
+import { useOfflineStore } from '../store/offlineStore';
 import { api } from '../api/client';
 
 interface Props {
@@ -62,9 +63,10 @@ export default function ArtworkImage({ type, id, size = 64, style, borderRadius,
   }, [defer, visible, id]);
 
   const token = useAuthStore((s) => s.token);
-  let uri = api.getArtworkUrl(type, id);
-  if (token) uri += (uri.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
-  if (Platform.OS !== 'web' && retryCount > 0) {
+  const localArtworkUri = useOfflineStore((s) => Platform.OS !== 'web' ? s.cachedArtwork[id] : undefined);
+  let uri = localArtworkUri || api.getArtworkUrl(type, id);
+  if (!localArtworkUri && token) uri += (uri.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  if (!localArtworkUri && Platform.OS !== 'web' && retryCount > 0) {
     uri += (uri.includes('?') ? '&' : '?') + 'retry=' + String(retryCount);
   }
   const uriInvalid = !uri || typeof uri !== 'string' || uri.includes('undefined');

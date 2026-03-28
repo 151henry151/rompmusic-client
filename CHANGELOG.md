@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-03-28
+
+### Added
+
+- Merge offline library from `cursor/offline-library`: download tracks and albums on native, offline library screen with downloaded/recent filters, `offlineStore` and `offlineStorage`, cached artwork and library metadata, settings for offline storage, prefer local files and cached artwork in player and `ArtworkImage`.
+- Depend on `expo-file-system` for local audio and artwork paths.
+
+### Changed
+
+- In `playTrack`, call `recordRecentPlay` before shuffle/queue setup so offline recent list stays correct when shuffle is enabled.
+
 ## [0.1.13] - 2026-03-28
 
 ### Added

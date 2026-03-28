@@ -449,6 +449,16 @@ function removePlayer(p: AudioPlayer | null): void {
 }
 
 function getStreamUrl(track: Track): string {
+  // Prefer locally downloaded audio when available (offline playback)
+  if (Platform.OS !== 'web') {
+    try {
+      const { useOfflineStore } = require('./offlineStore');
+      const localUri = useOfflineStore.getState().getLocalAudioUri(track.id);
+      if (localUri) return localUri;
+    } catch {
+      // offlineStore not available; fall through to network
+    }
+  }
   const format = getStreamFormatForTrack(track);
   let url = api.getStreamUrl(track.id, format);
   const t = getToken();
@@ -1113,6 +1123,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playTrack: async (track, queue = []) => {
+    try {
+      const { useOfflineStore } = require('./offlineStore');
+      useOfflineStore.getState().recordRecentPlay(track as import('./offlineStore').OfflineTrack);
+    } catch {
+      // offlineStore not available
+    }
     let tracks = queue.length ? queue : [track];
     let idx = tracks.findIndex((t) => t.id === track.id);
     let startIndex = idx >= 0 ? idx : 0;
