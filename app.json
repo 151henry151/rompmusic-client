@@ -3,7 +3,7 @@
     "name": "RompMusic",
     "slug": "rompmusic-client",
     "scheme": "rompmusic",
-    "version": "0.1.12",
+    "version": "0.1.13",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -36,7 +36,7 @@
       "permissions": [
         "android.permission.WAKE_LOCK"
       ],
-      "versionCode": 11
+      "versionCode": 12
     },
     "web": {
       "favicon": "./assets/favicon.png"

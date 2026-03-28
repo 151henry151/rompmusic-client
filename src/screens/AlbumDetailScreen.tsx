@@ -78,6 +78,7 @@ function TrackRow({
   playNext,
   onShare,
   onAddToPlaylist,
+  onAutoplayFromTrack,
 }: {
   track: Track & { album_title?: string; artist_name?: string };
   albumId: number;
@@ -88,6 +89,7 @@ function TrackRow({
   playNext: (t: Track | Track[]) => void;
   onShare?: (t: Track & { album_title?: string; artist_name?: string }) => void;
   onAddToPlaylist?: (t: Track & { album_title?: string; artist_name?: string }) => void;
+  onAutoplayFromTrack?: () => void;
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
   return (
@@ -103,6 +105,9 @@ function TrackRow({
             onDismiss={() => setMenuVisible(false)}
             anchor={<IconButton icon="dots-vertical" onPress={() => setMenuVisible(true)} accessibilityLabel="Track options" />}
           >
+            {onAutoplayFromTrack && (
+              <Menu.Item onPress={() => { onAutoplayFromTrack(); setMenuVisible(false); }} title="Autoplay from this track" leadingIcon="auto-fix" />
+            )}
             <Menu.Item onPress={() => { addToQueue(track); setMenuVisible(false); }} title="Add to queue" leadingIcon="playlist-plus" />
             <Menu.Item onPress={() => { playNext(track); setMenuVisible(false); }} title="Play next" leadingIcon="play-circle" />
             {onAddToPlaylist && (
@@ -190,6 +195,8 @@ export default function AlbumDetailScreen() {
   const isGrouped = effectiveAlbumIds.length > 1;
 
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const playTrackWithAutoplay = usePlayerStore((s) => s.playTrackWithAutoplay);
+  const playAlbumWithAutoplay = usePlayerStore((s) => s.playAlbumWithAutoplay);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
   const dismissTriggeredRef = React.useRef(false);
@@ -458,6 +465,9 @@ export default function AlbumDetailScreen() {
                   Play album
                 </Button>
                 <View style={styles.albumActionRow}>
+                  <Button mode="outlined" compact onPress={() => playAlbumWithAutoplay(mergedTracks)} style={styles.albumActionBtn}>
+                    Autoplay from this album
+                  </Button>
                   <Button mode="outlined" compact onPress={() => addToQueue(mergedTracks)} style={styles.albumActionBtn}>
                     Add to queue
                   </Button>
@@ -505,6 +515,9 @@ export default function AlbumDetailScreen() {
                           Play album
                         </Button>
                         <View style={styles.discActionRow}>
+                          <Button mode="outlined" compact onPress={() => playAlbumWithAutoplay(discTracks)} style={styles.albumActionBtn}>
+                            Autoplay from this album
+                          </Button>
                           <Button mode="outlined" compact onPress={() => addToQueue(discTracks)} style={styles.albumActionBtn}>
                             Add to queue
                           </Button>
@@ -532,6 +545,7 @@ export default function AlbumDetailScreen() {
                           playNext={playNext}
                           onShare={handleShareTrack}
                           onAddToPlaylist={handleAddToPlaylist}
+                          onAutoplayFromTrack={() => playTrackWithAutoplay(t)}
                         />
                       );
                     })
@@ -562,6 +576,7 @@ export default function AlbumDetailScreen() {
                   playNext={playNext}
                   onShare={handleShareTrack}
                   onAddToPlaylist={handleAddToPlaylist}
+                  onAutoplayFromTrack={() => playTrackWithAutoplay(t)}
                 />
               );
             })

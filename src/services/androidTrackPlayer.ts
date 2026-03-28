@@ -103,11 +103,7 @@ export async function androidPlaybackService(): Promise<void> {
     if (transitionRecoveryInFlight) return;
     transitionRecoveryInFlight = true;
     try {
-      const [playbackState, activeIndex, queue] = await Promise.all([
-        TrackPlayer.getPlaybackState(),
-        TrackPlayer.getActiveTrackIndex(),
-        TrackPlayer.getQueue(),
-      ]);
+      const playbackState = await TrackPlayer.getPlaybackState();
       if (
         playbackState.state === State.Playing ||
         playbackState.state === State.Loading ||
@@ -115,9 +111,8 @@ export async function androidPlaybackService(): Promise<void> {
       ) {
         return;
       }
-      if (typeof activeIndex !== 'number' || activeIndex < 0 || activeIndex + 1 >= queue.length) return;
-      await TrackPlayer.skipToNext();
-      await TrackPlayer.play();
+      const { skipToNext } = require('../store/playerStore').usePlayerStore.getState();
+      await skipToNext();
     } catch {
       /* no-op */
     } finally {
@@ -136,16 +131,16 @@ export async function androidPlaybackService(): Promise<void> {
   });
   TrackPlayer.addEventListener(Event.RemoteNext, async () => {
     try {
-      await TrackPlayer.skipToNext();
-      await TrackPlayer.play();
+      const { skipToNext } = require('../store/playerStore').usePlayerStore.getState();
+      await skipToNext();
     } catch {
       /* no-op at queue boundary */
     }
   });
   TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
     try {
-      await TrackPlayer.skipToPrevious();
-      await TrackPlayer.play();
+      const { skipToPrevious } = require('../store/playerStore').usePlayerStore.getState();
+      await skipToPrevious();
     } catch {
       /* no-op at queue boundary */
     }

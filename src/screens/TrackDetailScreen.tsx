@@ -33,6 +33,7 @@ export default function TrackDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'TrackDetail'>>();
   const trackId = Number((route.params ?? {}).trackId) || 0;
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const playTrackWithAutoplay = usePlayerStore((s) => s.playTrackWithAutoplay);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const playNext = usePlayerStore((s) => s.playNext);
   const dismissTriggeredRef = React.useRef(false);
@@ -140,6 +141,9 @@ export default function TrackDetailScreen() {
         </Text>
         <Button mode="contained" onPress={handlePlay} style={styles.playButton} icon="play">
           Play
+        </Button>
+        <Button mode="outlined" onPress={() => playTrackWithAutoplay(track)} style={styles.albumButton} icon="auto-fix">
+          Autoplay from this track
         </Button>
         <Button mode="outlined" onPress={() => addToQueue(track)} style={styles.albumButton} icon="playlist-plus">
           Add to queue

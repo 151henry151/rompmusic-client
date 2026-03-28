@@ -44,6 +44,74 @@ const PRESTART_BEFORE_END_SEC = 15;
 const PROMOTE_BEFORE_END_SEC = 0.5;
 /** When track duration is 0 or unknown (e.g. stream), use this as fallback so we still advance. */
 const UNKNOWN_DURATION_FALLBACK_SEC = 600;
+/** When autoplay is on, top up the queue when we're this many tracks from the end so playback is effectively infinite. */
+const AUTOPLAY_TOP_UP_THRESHOLD = 3;
+
+/** Shuffle array: item at keepIndex stays first, rest are Fisher-Yates shuffled. */
+function shuffleQueueKeepingFirst<T>(arr: T[], keepIndex: number): T[] {
+  if (arr.length <= 1) return [...arr];
+  const out = [...arr];
+  const first = out[keepIndex];
+  out.splice(keepIndex, 1);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return [first, ...out];
+}
+
+function mapSimilarResponseToTrack(t: {
+  id: number;
+  title: string;
+  album_id: number;
+  artist_id: number;
+  album_title?: string;
+  artist_name?: string;
+  track_number: number;
+  disc_number: number;
+  duration: number;
+  format?: string;
+}): Track {
+  return {
+    id: t.id,
+    title: t.title,
+    album_id: t.album_id,
+    artist_id: t.artist_id,
+    album_title: t.album_title,
+    artist_name: t.artist_name,
+    track_number: t.track_number ?? 0,
+    disc_number: t.disc_number ?? 0,
+    duration: t.duration ?? 0,
+    format: t.format,
+  };
+}
+
+/** Fetch similar tracks for the given track and append to queue (no autoplayStartIndex change). Used for infinite autoplay. */
+async function appendSimilarTracksForAutoplay(
+  getState: () => { queue: Track[] },
+  setState: (partial: { queue: Track[] } | ((s: { queue: Track[] }) => { queue: Track[] })) => void,
+  track: Track
+): Promise<Track[]> {
+  const limit = 15;
+  try {
+    const raw = await api.getSimilarTracks(track.id, limit);
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+    const mapped = raw.map(mapSimilarResponseToTrack);
+    setState((s) => ({ queue: [...s.queue, ...mapped] }));
+    if (isAndroidTrackPlayerMode()) {
+      try {
+        await ensureAndroidTrackPlayerReady();
+        await TrackPlayer.add(mapped.map(mapTrackToAndroidQueueItem));
+        androidQueueSignature = '';
+      } catch {
+        /* ignore */
+      }
+    }
+    return mapped;
+  } catch {
+    return [];
+  }
+}
 
 export interface Track {
   id: number;
@@ -77,6 +145,10 @@ interface PlayerState {
   skipToNext: () => Promise<void>;
   skipToPrevious: () => Promise<void>;
   playTrack: (track: Track, queue?: Track[]) => Promise<void>;
+  /** Play a single track and queue similar tracks (Last.fm-based), then enable autoplay. */
+  playTrackWithAutoplay: (track: Track) => Promise<void>;
+  /** Play an album and queue similar tracks after it, then enable autoplay. */
+  playAlbumWithAutoplay: (tracks: Track[]) => Promise<void>;
   addToQueue: (tracks: Track | Track[]) => void;
   playNext: (tracks: Track | Track[]) => void;
   clearQueue: () => void;
@@ -84,6 +156,11 @@ interface PlayerState {
   setAutoplay: (enabled: boolean) => void;
   /** First queue index that was added by autoplay (similar tracks). null = no autoplay segment. */
   autoplayStartIndex: number | null;
+  shuffleEnabled: boolean;
+  setShuffle: (enabled: boolean) => void;
+  /** 'none' | 'one' (repeat current) | 'all' (repeat queue). Cycle: none -> all -> one -> none. */
+  repeatMode: 'none' | 'one' | 'all';
+  cycleRepeat: () => void;
   /** Call when app goes to background (screen off). Enables catch-up when app returns. */
   onAppBackground: () => void;
   /** Call when app becomes active. Advances to correct track if we missed end while backgrounded. */
@@ -593,6 +670,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   error: null,
   autoplayEnabled: false,
   autoplayStartIndex: null,
+  shuffleEnabled: false,
+  repeatMode: 'none',
 
   setVolume: async (v: number) => {
     currentVolume = Math.max(0, Math.min(1, v));
@@ -606,17 +685,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0) => {
-    const boundedIndex = tracks.length === 0 ? 0 : Math.max(0, Math.min(startIndex, tracks.length - 1));
+    let queueToSet = tracks;
+    let indexToSet = tracks.length === 0 ? 0 : Math.max(0, Math.min(startIndex, tracks.length - 1));
+    if (get().shuffleEnabled && tracks.length > 1) {
+      queueToSet = shuffleQueueKeepingFirst(tracks, indexToSet);
+      indexToSet = 0;
+    }
     if (isAndroidTrackPlayerMode()) {
       useNativeQueueAndroid = false;
       androidQueueSignature = '';
     }
     set({
-      queue: tracks,
-      currentIndex: boundedIndex,
-      currentTrack: tracks[boundedIndex] ?? null,
+      queue: queueToSet,
+      currentIndex: indexToSet,
+      currentTrack: queueToSet[indexToSet] ?? null,
       position: 0,
-      duration: tracks[boundedIndex]?.duration ?? 0,
+      duration: queueToSet[indexToSet]?.duration ?? 0,
       autoplayStartIndex: null,
     });
   },
@@ -784,45 +868,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     clearScheduledAdvance();
     clearStartFallback();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
-    let { queue, currentIndex, currentTrack, autoplayEnabled } = get();
+    let { queue, currentIndex, currentTrack, autoplayEnabled, repeatMode } = get();
     if (isAndroidTrackPlayerMode()) {
       await ensureAndroidTrackPlayerReady();
       if (currentIndex + 1 >= queue.length) {
+        if (repeatMode === 'one' && currentTrack) {
+          await TrackPlayer.seekTo(0);
+          set({ position: 0 });
+          return;
+        }
+        if (repeatMode === 'all' && queue.length > 0) {
+          await TrackPlayer.skip(0, 0);
+          await TrackPlayer.play();
+          await syncFromAndroidTrackPlayer();
+          const afterState = get();
+          if (afterState.autoplayEnabled && afterState.currentTrack && afterState.currentIndex >= afterState.queue.length - AUTOPLAY_TOP_UP_THRESHOLD) {
+            void appendSimilarTracksForAutoplay(get, set, afterState.currentTrack);
+          }
+          return;
+        }
         if (autoplayEnabled && currentTrack) {
-          try {
-            const similar = await api.getSimilarTracks(currentTrack.id, 15);
-            if (similar?.length) {
-              const mapped = similar.map((t: {
-                id: number;
-                title: string;
-                album_id: number;
-                artist_id: number;
-                album_title?: string;
-                artist_name?: string;
-                track_number: number;
-                disc_number: number;
-                duration: number;
-                format?: string;
-              }) => ({
-                id: t.id,
-                title: t.title,
-                album_id: t.album_id,
-                artist_id: t.artist_id,
-                album_title: t.album_title,
-                artist_name: t.artist_name,
-                track_number: t.track_number,
-                disc_number: t.disc_number,
-                duration: t.duration,
-                format: t.format,
-              }));
-              const startIndex = get().queue.length;
-              set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
-              queue = [...queue, ...mapped];
-              await TrackPlayer.add(mapped.map(mapTrackToAndroidQueueItem));
-              androidQueueSignature = '';
+          const added = await appendSimilarTracksForAutoplay(get, set, currentTrack);
+          if (added.length) {
+            queue = [...queue, ...added];
+            if (get().autoplayStartIndex === null) {
+              set({ autoplayStartIndex: get().queue.length - added.length });
             }
-          } catch {
-            /* ignore autoplay fetch errors */
           }
         }
       }
@@ -843,6 +914,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       } catch (e) {
         set({ error: e instanceof Error ? e.message : 'Skip failed' });
       }
+      const afterState = get();
+      if (afterState.autoplayEnabled && afterState.currentTrack && afterState.currentIndex >= afterState.queue.length - AUTOPLAY_TOP_UP_THRESHOLD) {
+        void appendSimilarTracksForAutoplay(get, set, afterState.currentTrack);
+      }
       return;
     }
     if (useNativeQueueAndroid && sound && currentIndex + 1 < queue.length) {
@@ -851,32 +926,41 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextTrack = queue[nextIndex];
         set({ currentIndex: nextIndex, currentTrack: nextTrack, position: 0, duration: nextTrack.duration ?? 0 });
         setLockScreenMetadata(sound, nextTrack);
+        if (autoplayEnabled && nextTrack && nextIndex >= queue.length - AUTOPLAY_TOP_UP_THRESHOLD) {
+          void appendSimilarTracksForAutoplay(get, set, nextTrack);
+        }
         return;
       }
       useNativeQueueAndroid = false;
     }
     if (currentIndex + 1 >= queue.length) {
+      if (repeatMode === 'one' && currentTrack && sound) {
+        await sound.seekTo(0);
+        set({ position: 0 });
+        return;
+      }
+      if (repeatMode === 'all' && queue.length > 0) {
+        const firstTrack = queue[0];
+        removePlayer(sound);
+        removePlayer(nextSound);
+        nextSound = null;
+        prestartedNext = false;
+        sound = loadAndPlay(firstTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
+        setLockScreenMetadata(sound, firstTrack);
+        set({ currentIndex: 0, currentTrack: firstTrack, position: 0, duration: firstTrack.duration });
+        const afterState = get();
+        if (afterState.autoplayEnabled && afterState.currentTrack && 0 >= afterState.queue.length - AUTOPLAY_TOP_UP_THRESHOLD) {
+          void appendSimilarTracksForAutoplay(get, set, afterState.currentTrack);
+        }
+        return;
+      }
       if (autoplayEnabled && currentTrack) {
-        try {
-          const similar = await api.getSimilarTracks(currentTrack.id, 15);
-          if (similar?.length) {
-            const mapped = similar.map((t: { id: number; title: string; album_id: number; artist_id: number; album_title?: string; artist_name?: string; track_number: number; disc_number: number; duration: number }) => ({
-              id: t.id,
-              title: t.title,
-              album_id: t.album_id,
-              artist_id: t.artist_id,
-              album_title: t.album_title,
-              artist_name: t.artist_name,
-              track_number: t.track_number,
-              disc_number: t.disc_number,
-              duration: t.duration,
-            }));
-            const startIndex = get().queue.length;
-            set((s) => ({ queue: [...s.queue, ...mapped], autoplayStartIndex: startIndex }));
-            queue = [...queue, ...mapped];
+        const added = await appendSimilarTracksForAutoplay(get, set, currentTrack);
+        if (added.length) {
+          queue = [...queue, ...added];
+          if (get().autoplayStartIndex === null) {
+            set({ autoplayStartIndex: get().queue.length - added.length });
           }
-        } catch {
-          /* ignore autoplay fetch errors */
         }
       }
       const state = get();
@@ -954,12 +1038,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       setLockScreenMetadata(sound, nextTrack);
     }
     set({ currentTrack: nextTrack, currentIndex: nextIndex, position: 0, duration: nextTrack.duration });
+    if (get().autoplayEnabled && nextTrack && nextIndex >= get().queue.length - AUTOPLAY_TOP_UP_THRESHOLD) {
+      void appendSimilarTracksForAutoplay(get, set, nextTrack);
+    }
   },
 
   skipToPrevious: async () => {
     clearStartFallback();
     suppressRemoteSkipDetectionUntil = Date.now() + 1000;
-    const { position, queue, currentIndex } = get();
+    const { position, queue, currentIndex, repeatMode } = get();
     if (isAndroidTrackPlayerMode()) {
       await ensureAndroidTrackPlayerReady();
       const progress = await TrackPlayer.getProgress();
@@ -969,7 +1056,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ position: 0 });
         return;
       }
-      if (currentIndex <= 0) return;
+      if (currentIndex <= 0) {
+        if (repeatMode === 'all' && queue.length > 0) {
+          await TrackPlayer.skip(queue.length - 1, 0);
+          await TrackPlayer.play();
+          await syncFromAndroidTrackPlayer();
+          return;
+        }
+        return;
+      }
       try {
         await TrackPlayer.skipToPrevious();
         await TrackPlayer.play();
@@ -994,7 +1089,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ position: 0 });
       return;
     }
-    if (currentIndex <= 0) return;
+    if (currentIndex <= 0) {
+      if (repeatMode === 'all' && queue.length > 0) {
+        const lastTrack = queue[queue.length - 1];
+        removePlayer(sound);
+        removePlayer(nextSound);
+        nextSound = null;
+        prestartedNext = false;
+        sound = loadAndPlay(lastTrack, () => get().skipToNext(), (pos) => set({ position: pos }));
+        setLockScreenMetadata(sound, lastTrack);
+        set({ currentIndex: queue.length - 1, currentTrack: lastTrack, position: 0, duration: lastTrack.duration });
+      }
+      return;
+    }
     const prevTrack = queue[currentIndex - 1];
     removePlayer(sound);
     removePlayer(nextSound);
@@ -1006,17 +1113,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playTrack: async (track, queue = []) => {
+    let tracks = queue.length ? queue : [track];
+    let idx = tracks.findIndex((t) => t.id === track.id);
+    let startIndex = idx >= 0 ? idx : 0;
+    if (get().shuffleEnabled && tracks.length > 1) {
+      tracks = shuffleQueueKeepingFirst(tracks, startIndex);
+      startIndex = 0;
+    }
     if (isAndroidTrackPlayerMode()) {
       stopAndRemoveAllPlayers();
-      const tracks = queue.length ? queue : [track];
-      const idx = tracks.findIndex((t) => t.id === track.id);
-      const startIndex = idx >= 0 ? idx : 0;
       set({
         queue: tracks,
         currentIndex: startIndex,
-        currentTrack: track,
+        currentTrack: tracks[startIndex] ?? track,
         position: 0,
-        duration: track.duration,
+        duration: (tracks[startIndex] ?? track).duration,
         autoplayStartIndex: null,
         error: null,
       });
@@ -1025,10 +1136,109 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return;
     }
     stopAndRemoveAllPlayers();
-    const tracks = queue.length ? queue : [track];
-    const idx = tracks.findIndex((t) => t.id === track.id);
-    const startIndex = idx >= 0 ? idx : 0;
-    set({ queue: tracks, currentIndex: startIndex, currentTrack: track, position: 0, duration: track.duration, autoplayStartIndex: null });
+    set({ queue: tracks, currentIndex: startIndex, currentTrack: tracks[startIndex] ?? track, position: 0, duration: (tracks[startIndex] ?? track).duration, autoplayStartIndex: null });
+    await get().play();
+  },
+
+  playTrackWithAutoplay: async (track) => {
+    const limit = 15;
+    let similar: Track[] = [];
+    try {
+      const raw = await api.getSimilarTracks(track.id, limit);
+      if (Array.isArray(raw) && raw.length > 0) {
+        similar = raw.map((t: { id: number; title: string; album_id: number; artist_id: number; album_title?: string; artist_name?: string; track_number: number; disc_number: number; duration: number; format?: string }) => ({
+          id: t.id,
+          title: t.title,
+          album_id: t.album_id,
+          artist_id: t.artist_id,
+          album_title: t.album_title,
+          artist_name: t.artist_name,
+          track_number: t.track_number ?? 0,
+          disc_number: t.disc_number ?? 0,
+          duration: t.duration ?? 0,
+          format: t.format,
+        }));
+      }
+    } catch {
+      /* ignore; queue just the one track */
+    }
+    let tracks = [track, ...similar];
+    if (get().shuffleEnabled && tracks.length > 1) {
+      tracks = shuffleQueueKeepingFirst(tracks, 0);
+    }
+    if (isAndroidTrackPlayerMode()) {
+      stopAndRemoveAllPlayers();
+      set({
+        queue: tracks,
+        currentIndex: 0,
+        currentTrack: tracks[0],
+        position: 0,
+        duration: tracks[0].duration,
+        autoplayStartIndex: 1,
+        autoplayEnabled: true,
+        error: null,
+      });
+      androidQueueSignature = '';
+      await get().play();
+      return;
+    }
+    stopAndRemoveAllPlayers();
+    set({ queue: tracks, currentIndex: 0, currentTrack: tracks[0], position: 0, duration: tracks[0].duration, autoplayStartIndex: 1, autoplayEnabled: true });
+    await get().play();
+  },
+
+  playAlbumWithAutoplay: async (albumTracks) => {
+    if (albumTracks.length === 0) return;
+    const firstIndex = Math.floor(Math.random() * albumTracks.length);
+    const first = albumTracks[firstIndex];
+    const restOfAlbum = albumTracks.filter((_, i) => i !== firstIndex);
+    let similar: Track[] = [];
+    try {
+      const raw = await api.getSimilarTracks(first.id, 15);
+      if (Array.isArray(raw) && raw.length > 0) {
+        similar = raw.map((t: { id: number; title: string; album_id: number; artist_id: number; album_title?: string; artist_name?: string; track_number: number; disc_number: number; duration: number; format?: string }) => ({
+          id: t.id,
+          title: t.title,
+          album_id: t.album_id,
+          artist_id: t.artist_id,
+          album_title: t.album_title,
+          artist_name: t.artist_name,
+          track_number: t.track_number ?? 0,
+          disc_number: t.disc_number ?? 0,
+          duration: t.duration ?? 0,
+          format: t.format,
+        }));
+      }
+    } catch {
+      /* ignore; queue just the one track + rest of album */
+    }
+    const toShuffle = [...restOfAlbum, ...similar];
+    for (let i = toShuffle.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [toShuffle[i], toShuffle[j]] = [toShuffle[j], toShuffle[i]];
+    }
+    let tracks = [first, ...toShuffle];
+    if (get().shuffleEnabled && tracks.length > 1) {
+      tracks = shuffleQueueKeepingFirst(tracks, 0);
+    }
+    if (isAndroidTrackPlayerMode()) {
+      stopAndRemoveAllPlayers();
+      set({
+        queue: tracks,
+        currentIndex: 0,
+        currentTrack: tracks[0],
+        position: 0,
+        duration: tracks[0].duration,
+        autoplayStartIndex: 1,
+        autoplayEnabled: true,
+        error: null,
+      });
+      androidQueueSignature = '';
+      await get().play();
+      return;
+    }
+    stopAndRemoveAllPlayers();
+    set({ queue: tracks, currentIndex: 0, currentTrack: tracks[0], position: 0, duration: tracks[0].duration, autoplayStartIndex: 1, autoplayEnabled: true });
     await get().play();
   },
 
@@ -1143,6 +1353,40 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         /* ignore */
       }
     })();
+  },
+
+  setShuffle: (enabled) => {
+    set({ shuffleEnabled: enabled });
+    if (!enabled) return;
+    const { queue, currentIndex, isPlaying } = get();
+    if (queue.length <= 1) return;
+    const shuffled = shuffleQueueKeepingFirst(queue, currentIndex);
+    set({ queue: shuffled, currentIndex: 0, currentTrack: shuffled[0] ?? null, position: 0, duration: shuffled[0]?.duration ?? 0 });
+    if (isAndroidTrackPlayerMode()) {
+      androidQueueSignature = '';
+      (async () => {
+        try {
+          await ensureAndroidTrackPlayerReady();
+          await TrackPlayer.reset();
+          await TrackPlayer.add(shuffled.map(mapTrackToAndroidQueueItem));
+          await TrackPlayer.skip(0, 0);
+          await TrackPlayer.play();
+          await syncFromAndroidTrackPlayer();
+        } catch {
+          /* ignore */
+        }
+      })();
+    } else if (isPlaying && shuffled[0]) {
+      stopAndRemoveAllPlayers();
+      sound = loadAndPlay(shuffled[0], () => get().skipToNext(), (pos) => set({ position: pos }));
+      setLockScreenMetadata(sound, shuffled[0]);
+    }
+  },
+
+  cycleRepeat: () => {
+    const { repeatMode } = get();
+    const next: 'none' | 'one' | 'all' = repeatMode === 'none' ? 'all' : repeatMode === 'all' ? 'one' : 'none';
+    set({ repeatMode: next });
   },
 
   onAppBackground: () => {

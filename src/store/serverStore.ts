@@ -14,43 +14,56 @@ import { create } from 'zustand';
 const STORAGE_KEY = 'rompmusic_server_url';
 const URL_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
 
+function parseUrlLike(rawUrl: string): { scheme: string; host: string; path: string } | null {
+  // Avoid relying on a global `URL` implementation in React Native.
+  const m = rawUrl.trim().match(/^([a-zA-Z][a-zA-Z\d+\-.]*):\/\//);
+  if (!m) return null;
+  const scheme = m[1].toLowerCase();
+  const rest = rawUrl.trim().slice(m[0].length); // after "<scheme>://"
+  const noQueryOrHash = rest.split(/[?#]/)[0];
+  const slashIndex = noQueryOrHash.indexOf('/');
+
+  const host = slashIndex === -1 ? noQueryOrHash : noQueryOrHash.slice(0, slashIndex);
+  const path = slashIndex === -1 ? '' : noQueryOrHash.slice(slashIndex); // includes leading '/'
+
+  if (!host) return null;
+  return { scheme, host, path };
+}
+
 /** Normalize user input to a full API base URL (e.g. https://music.example.com -> https://music.example.com/api/v1). */
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) return '';
 
   const withScheme = URL_SCHEME_REGEX.test(trimmed) ? trimmed : `https://${trimmed}`;
-
-  try {
-    const parsed = new URL(withScheme);
-    const cleanPath = parsed.pathname.replace(/\/+$/, '');
-    if (/\/api\/v1$/i.test(cleanPath)) {
-      parsed.pathname = cleanPath;
-    } else if (!cleanPath || cleanPath === '/') {
-      parsed.pathname = '/api/v1';
-    } else {
-      parsed.pathname = `${cleanPath}/api/v1`;
-    }
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.toString().replace(/\/+$/, '');
-  } catch {
+  const parsed = parseUrlLike(withScheme);
+  if (!parsed) {
+    // Last-resort fallback; ensures we return something usable.
     const fallback = withScheme.replace(/\/+$/, '');
     if (/\/api\/v1\/?$/i.test(fallback)) return fallback.replace(/\/+$/, '');
     return `${fallback}/api/v1`;
   }
+
+  const cleanPath = parsed.path.replace(/\/+$/, '');
+  const basePath = /\/api\/v1$/i.test(cleanPath)
+    ? cleanPath
+    : !cleanPath || cleanPath === '/'
+      ? '/api/v1'
+      : `${cleanPath}/api/v1`;
+
+  return `${parsed.scheme}://${parsed.host}${basePath}`.replace(/\/+$/, '');
 }
 
 /** Returns true when URL uses insecure HTTP for a non-local host. */
 export function isInsecureRemoteHttpUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:') return false;
-    const host = parsed.hostname.toLowerCase();
-    return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
-  } catch {
-    return false;
-  }
+  const trimmed = url.trim();
+  if (!/^http:\/\//i.test(trimmed)) return false;
+
+  const rest = trimmed.replace(/^http:\/\//i, '');
+  const hostPort = rest.split(/[/?#]/)[0];
+  const host = hostPort.split(':')[0].toLowerCase();
+
+  return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
 }
 
 interface ServerState {

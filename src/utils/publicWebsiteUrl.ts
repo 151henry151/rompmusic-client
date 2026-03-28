@@ -6,12 +6,17 @@
 const DEFAULT_WEBSITE_URL = 'https://rompmusic.com';
 
 function normalizeWebsiteBase(raw: string): string {
-  try {
-    const parsed = new URL(raw);
-    return `${parsed.protocol}//${parsed.host}`;
-  } catch {
-    return DEFAULT_WEBSITE_URL;
-  }
+  const trimmed = raw.trim();
+  // Avoid relying on a global `URL` implementation in React Native.
+  const schemeMatch = trimmed.match(/^([a-zA-Z][a-zA-Z\d+\-.]*):\/\//);
+  if (!schemeMatch) return DEFAULT_WEBSITE_URL;
+
+  const scheme = schemeMatch[1].toLowerCase();
+  const rest = trimmed.slice(schemeMatch[0].length); // after "<scheme>://"
+  const hostPort = rest.split(/[/?#]/)[0];
+  if (!hostPort) return DEFAULT_WEBSITE_URL;
+
+  return `${scheme}://${hostPort}`;
 }
 
 export function getWebsiteBaseUrl(): string {

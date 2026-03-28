@@ -41,6 +41,10 @@ export default function PlayerScreen({ onClose }: Props) {
     playTrack,
     autoplayEnabled,
     setAutoplay,
+    shuffleEnabled,
+    setShuffle,
+    repeatMode,
+    cycleRepeat,
   } = usePlayerStore();
 
   React.useEffect(() => {
@@ -96,6 +100,13 @@ export default function PlayerScreen({ onClose }: Props) {
       </View>
       <View style={styles.controls}>
         <IconButton
+          icon="shuffle"
+          size={28}
+          onPress={() => setShuffle(!shuffleEnabled)}
+          iconColor={shuffleEnabled ? '#4a9eff' : '#888'}
+          accessibilityLabel={shuffleEnabled ? 'Shuffle on' : 'Shuffle off'}
+        />
+        <IconButton
           icon="skip-previous"
           size={48}
           onPress={skipToPrevious}
@@ -115,6 +126,15 @@ export default function PlayerScreen({ onClose }: Props) {
           onPress={skipToNext}
           disabled={isLoading}
           accessibilityLabel="Next track"
+        />
+        <IconButton
+          icon={repeatMode === 'one' ? 'repeat-once' : 'repeat'}
+          size={28}
+          onPress={cycleRepeat}
+          iconColor={repeatMode !== 'none' ? '#4a9eff' : '#888'}
+          accessibilityLabel={
+            repeatMode === 'none' ? 'Repeat off' : repeatMode === 'all' ? 'Repeat queue' : 'Repeat one'
+          }
         />
       </View>
       <View style={styles.volumeRow}>

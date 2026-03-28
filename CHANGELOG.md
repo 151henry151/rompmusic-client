@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-03-28
+
+### Added
+
+- Add shuffle and repeat controls (off, repeat queue, repeat one) on the full player and mini player; handle repeat and remote skip events on Android native queue playback.
+- Append similar tracks when the queue runs low while autoplay is enabled so playback can continue past the initial similar segment.
+- Add `playTrackWithAutoplay` and `playAlbumWithAutoplay` and wire Autoplay from this track/album actions on track, album, and track-row menus.
+
+### Changed
+
+- Parse API and website base URLs with string logic in `serverStore.ts` and `publicWebsiteUrl.ts` instead of the global `URL` constructor where it is unavailable.
+- Increment `expo.android.versionCode` to `12`.
+
 ## [0.1.12] - 2026-03-27
 
 ### Added
