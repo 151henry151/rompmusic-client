@@ -195,7 +195,6 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     set((s) => {
       const ids = [track.id, ...s.recentlyPlayedIds.filter((id) => id !== track.id)].slice(0, MAX_RECENT_TRACKS);
       const tracks = { ...s.recentlyPlayedTracks, [track.id]: track };
-      // Prune old entries not in recent IDs
       const pruned: Record<number, OfflineTrack> = {};
       for (const id of ids) {
         if (tracks[id]) pruned[id] = tracks[id];
@@ -204,6 +203,36 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       persistState({ ...s, ...newState });
       return newState;
     });
+
+    // Auto-cache audio + artwork in background so recently played tracks are playable offline
+    if (Platform.OS !== 'web' && !get().downloadedTracks[track.id]?.localAudioUri) {
+      void (async () => {
+        try {
+          const localUri = await downloadTrackAudio(track.id);
+          if (localUri) {
+            set((s) => {
+              const updated = { ...s.recentlyPlayedTracks };
+              if (updated[track.id]) updated[track.id] = { ...updated[track.id], localAudioUri: localUri };
+              const newState = { recentlyPlayedTracks: updated };
+              persistState({ ...s, ...newState });
+              return newState;
+            });
+          }
+        } catch { /* non-fatal */ }
+        try {
+          if (!get().cachedArtwork[track.album_id]) {
+            const artUri = await downloadArtwork(track.album_id);
+            if (artUri) {
+              set((s) => {
+                const newState = { cachedArtwork: { ...s.cachedArtwork, [track.album_id]: artUri } };
+                persistState({ ...s, ...newState });
+                return newState;
+              });
+            }
+          }
+        } catch { /* non-fatal */ }
+      })();
+    }
   },
 
   cacheLibraryMetadata: async () => {
@@ -314,14 +343,24 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
 
   getOfflineAlbums: () => {
     const offlineTracks = get().getOfflineTracks();
+    const cache = get().libraryCache;
+    const cachedAlbumMap = new Map<number, OfflineAlbum>();
+    if (cache?.albums) {
+      for (const a of cache.albums) cachedAlbumMap.set(a.id, a);
+    }
     const albumMap = new Map<number, OfflineAlbum>();
     for (const t of offlineTracks) {
       if (!albumMap.has(t.album_id)) {
+        const cached = cachedAlbumMap.get(t.album_id);
         albumMap.set(t.album_id, {
           id: t.album_id,
-          title: t.album_title ?? 'Unknown Album',
-          artist_id: t.artist_id,
-          artist_name: t.artist_name,
+          title: cached?.title ?? t.album_title ?? 'Unknown Album',
+          artist_id: cached?.artist_id ?? t.artist_id,
+          artist_name: cached?.artist_name ?? t.artist_name,
+          year: cached?.year,
+          has_artwork: cached?.has_artwork,
+          artwork_hash: cached?.artwork_hash,
+          track_count: cached?.track_count,
           localArtworkUri: get().cachedArtwork[t.album_id],
         });
       }

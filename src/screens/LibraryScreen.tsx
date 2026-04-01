@@ -204,7 +204,6 @@ const sectionIndexStyles = StyleSheet.create({
 
 export default function LibraryScreen() {
   const isOnline = useIsOnline();
-  const libraryCache = useOfflineStore((s) => s.libraryCache);
   const offlineAlbums = useOfflineStore((s) => s.getOfflineAlbums());
   const [tab, setTab] = useState<TabType>('albums');
   const librarySort = useSettingsStore((s) => s.librarySort);
@@ -362,9 +361,9 @@ export default function LibraryScreen() {
     }
   }, [tab, isAlbumsRandomSort, refetchAlbums]);
   const albumsFromQuery = albumsData?.pages.flat() ?? [];
-  // When offline and query returned nothing, fall back to cached library metadata
-  const albumsRaw = (albumsFromQuery.length === 0 && !isOnline && libraryCache?.albums?.length)
-    ? libraryCache.albums
+  // When offline, show only albums that are available offline (downloaded + recently played).
+  const albumsRaw = (!isOnline && offlineAlbums.length > 0)
+    ? offlineAlbums
     : albumsFromQuery;
   const albums = albumsRaw;
   const albumGroups = useMemo(() => {
@@ -1332,13 +1331,13 @@ export default function LibraryScreen() {
         <View style={styles.offlineBanner}>
           <Text style={styles.offlineBannerText}>
             {albumsRaw.length > 0
-              ? '⬚ Offline mode — showing cached library'
-              : '⬚ Offline — no cached library available'}
+              ? '⬚ Offline mode — showing downloaded music'
+              : '⬚ Offline — no downloaded music available'}
           </Text>
-          {albumsRaw.length === 0 && Platform.OS !== 'web' && (
-            <TouchableOpacity onPress={() => navigation.navigate('OfflineLibrary')} style={styles.offlineBannerLink}>
-              <Text style={styles.offlineBannerLinkText}>View offline library →</Text>
-            </TouchableOpacity>
+          {albumsRaw.length === 0 && (
+            <Text style={styles.offlineBannerSubtext}>
+              Download songs while online to listen offline
+            </Text>
           )}
         </View>
       )}
@@ -1849,12 +1848,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  offlineBannerLink: {
-    marginTop: 6,
-  },
-  offlineBannerLinkText: {
-    color: '#4a9eff',
-    fontSize: 13,
-    fontWeight: '600',
+  offlineBannerSubtext: {
+    color: '#5a8ab5',
+    fontSize: 12,
+    marginTop: 4,
   },
 });
