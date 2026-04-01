@@ -6,7 +6,7 @@
 import React, { useEffect } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MD3DarkTheme, PaperProvider } from 'react-native-paper';
 
@@ -17,10 +17,31 @@ import { usePlayerStore } from './src/store/playerStore';
 import { useServerStore } from './src/store/serverStore';
 import { useSettingsStore } from './src/store/settingsStore';
 import { useOfflineStore } from './src/store/offlineStore';
+import { useNetworkStore, startNetworkMonitoring } from './src/hooks/useNetworkStatus';
 import { initAudio } from './src/services/audioService';
 import { initAndroidTrackPlayer } from './src/services/androidTrackPlayer';
 
-const queryClient = new QueryClient();
+// Tell React Query about our online status so it pauses queries when offline
+// instead of retrying and showing errors.
+onlineManager.setEventListener((setOnline) => {
+  return useNetworkStore.subscribe((state) => setOnline(state.isOnline));
+});
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        // Don't retry network errors when offline
+        if (!useNetworkStore.getState().isOnline) return false;
+        const msg = error instanceof Error ? error.message : '';
+        if (msg.includes('Network request failed') || msg.includes('Failed to fetch')) return false;
+        return failureCount < 2;
+      },
+      // Keep stale data visible while refetching (prevents flash of error)
+      staleTime: 5 * 60 * 1000,
+    },
+  },
+});
 
 function AppContent() {
   const restoreServerUrl = useServerStore((s) => s.restoreServerUrl);
@@ -49,12 +70,17 @@ function AppContent() {
         runTask('Settings restoration', restoreSettings, 5000),
       ]);
 
+      // Hydrate offline store early so cached library is available before first render.
+      await runTask('Offline store hydration', () => useOfflineStore.getState().hydrate(), 3000);
+
+      // Start network connectivity monitoring
+      startNetworkMonitoring();
+
       // Audio stack initialization should never block initial app render.
       void runTask('Android TrackPlayer initialization', initAndroidTrackPlayer);
       void runTask('Audio initialization', initAudio);
 
-      // Hydrate offline store and begin background library caching.
-      void runTask('Offline store hydration', () => useOfflineStore.getState().hydrate());
+      // Background: refresh the library metadata cache when online.
       void runTask('Library metadata caching', () => useOfflineStore.getState().cacheLibraryMetadata(), 120000);
     })();
   }, [restoreServerUrl, restoreSession, restoreSettings]);

@@ -19,6 +19,7 @@ import { groupAlbumsByArtwork } from '../utils/albumGrouping';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAuthStore } from '../store/authStore';
 import { useOfflineStore } from '../store/offlineStore';
+import { useIsOnline } from '../hooks/useNetworkStatus';
 import type { AppStackParamList } from '../navigation/types';
 import { getWebBasePath } from '../utils/webBasePath';
 
@@ -202,6 +203,9 @@ const sectionIndexStyles = StyleSheet.create({
 });
 
 export default function LibraryScreen() {
+  const isOnline = useIsOnline();
+  const libraryCache = useOfflineStore((s) => s.libraryCache);
+  const offlineAlbums = useOfflineStore((s) => s.getOfflineAlbums());
   const [tab, setTab] = useState<TabType>('albums');
   const librarySort = useSettingsStore((s) => s.librarySort);
   const setLibrarySort = useSettingsStore((s) => s.setLibrarySort);
@@ -357,7 +361,11 @@ export default function LibraryScreen() {
       hasRefetchedRandomRef.current = false;
     }
   }, [tab, isAlbumsRandomSort, refetchAlbums]);
-  const albumsRaw = albumsData?.pages.flat() ?? [];
+  const albumsFromQuery = albumsData?.pages.flat() ?? [];
+  // When offline and query returned nothing, fall back to cached library metadata
+  const albumsRaw = (albumsFromQuery.length === 0 && !isOnline && libraryCache?.albums?.length)
+    ? libraryCache.albums
+    : albumsFromQuery;
   const albums = albumsRaw;
   const albumGroups = useMemo(() => {
     const groups = groupAlbumsByArtwork(albums);
@@ -1320,14 +1328,28 @@ export default function LibraryScreen() {
           }
         >
           <View ref={scrollContentRef} collapsable={false}>
-      {anyLoading && (searchQuery ? true : artistsRaw.length === 0 && albumsRaw.length === 0) && (
+      {!isOnline && !searchQuery && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            {albumsRaw.length > 0
+              ? '⬚ Offline mode — showing cached library'
+              : '⬚ Offline — no cached library available'}
+          </Text>
+          {albumsRaw.length === 0 && Platform.OS !== 'web' && (
+            <TouchableOpacity onPress={() => navigation.navigate('OfflineLibrary')} style={styles.offlineBannerLink}>
+              <Text style={styles.offlineBannerLinkText}>View offline library →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {anyLoading && (searchQuery ? true : artistsRaw.length === 0 && albumsRaw.length === 0) && isOnline && (
         <View style={styles.loadingWrap}>
           <Text variant="bodyLarge" style={styles.loadingText}>
             {searchQuery ? 'Searching…' : 'Loading library…'}
           </Text>
         </View>
       )}
-      {anyError && !searchQuery && artistsRaw.length === 0 && albumsRaw.length === 0 && (
+      {anyError && !searchQuery && artistsRaw.length === 0 && albumsRaw.length === 0 && isOnline && (
         <View style={styles.loadingWrap}>
           <Text variant="bodyLarge" style={styles.errorText}>
             Failed to load: {(() => {
@@ -1337,7 +1359,7 @@ export default function LibraryScreen() {
           </Text>
         </View>
       )}
-      {allSettledEmpty && !showSuggestions && !searchQuery && (
+      {allSettledEmpty && !showSuggestions && !searchQuery && isOnline && (
         <View style={styles.loadingWrap}>
           <Text variant="bodyLarge" style={styles.loadingText}>
             No library items. Log in to the server dashboard and run a library scan to import your music.
@@ -1815,5 +1837,24 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#e57373',
+  },
+  offlineBanner: {
+    backgroundColor: '#1a2a3a',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    color: '#6ba3d6',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  offlineBannerLink: {
+    marginTop: 6,
+  },
+  offlineBannerLinkText: {
+    color: '#4a9eff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

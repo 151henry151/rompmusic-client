@@ -207,6 +207,13 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   },
 
   cacheLibraryMetadata: async () => {
+    // Skip network fetch if we know we're offline — cached data was already loaded by hydrate().
+    try {
+      const { useNetworkStore } = require('../hooks/useNetworkStatus');
+      if (!useNetworkStore.getState().isOnline) return;
+    } catch {
+      // network store not yet available; proceed anyway
+    }
     set({ isCachingLibrary: true });
     try {
       // Fetch all albums in pages
