@@ -1153,7 +1153,7 @@ export default function LibraryScreen() {
                 {Platform.OS !== 'web' && (
                   <IconButton
                     icon="download"
-                    size={21}
+                    size={22}
                     onPress={() => navigation.navigate('OfflineLibrary')}
                     iconColor="#888"
                     style={styles.headerToolbarIcon}
@@ -1162,7 +1162,7 @@ export default function LibraryScreen() {
                 )}
                 <IconButton
                   icon="clock-outline"
-                  size={21}
+                  size={22}
                   onPress={() => navigation.navigate('History')}
                   iconColor="#888"
                   style={styles.headerToolbarIcon}
@@ -1170,7 +1170,7 @@ export default function LibraryScreen() {
                 />
                 <IconButton
                   icon="playlist-music"
-                  size={21}
+                  size={22}
                   onPress={() => navigation.navigate('Playlists')}
                   iconColor="#888"
                   style={styles.headerToolbarIcon}
@@ -1203,7 +1203,7 @@ export default function LibraryScreen() {
               ) : (
                 <IconButton
                   icon="cog"
-                  size={21}
+                  size={22}
                   onPress={() => navigation.navigate('Settings')}
                   iconColor="#888"
                   style={styles.headerToolbarIcon}
@@ -1586,12 +1586,12 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'stretch',
   },
-  /** Narrow library toolbar: one row, tight spacing; tab = icon menu. */
+  /** Narrow library toolbar: one row; tab = icon menu; comfortable padding between clusters. */
   headerRow1Compact: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 4,
-    paddingRight: 6,
+    paddingLeft: 12,
+    paddingRight: 10,
     paddingBottom: 4,
     minHeight: 44,
   },
@@ -1603,22 +1603,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
-    gap: 2,
+    gap: 8,
   },
   headerLogoCompact: {
     width: 30,
     height: 30,
-    marginLeft: 2,
   },
   headerRow1Icons: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
-    marginLeft: -2,
+    marginLeft: 6,
+    gap: 4,
   },
   headerToolbarIcon: {
     margin: 0,
-    marginHorizontal: -10,
   },
   tabIconMenuAnchor: {
     margin: 0,
@@ -1634,7 +1633,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexShrink: 0,
     gap: 0,
-    marginLeft: 2,
+    marginLeft: 6,
   },
   loginLinkCompact: {
     minWidth: 0,
@@ -1684,7 +1683,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tabDropdownWrapCompact: {
-    marginLeft: -2,
     flexShrink: 0,
   },
   tabButton: {

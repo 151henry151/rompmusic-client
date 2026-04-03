@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-04-03
+
+### Changed
+
+- Relax narrow library toolbar spacing: more horizontal inset, gap between logo and tab icon, separation before utility icons, `gap` between toolbar icons instead of negative margins, slightly larger toolbar icon size.
+
 ## [0.1.17] - 2026-04-03
 
 ### Changed
