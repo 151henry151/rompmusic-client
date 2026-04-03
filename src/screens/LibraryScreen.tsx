@@ -902,22 +902,34 @@ export default function LibraryScreen() {
     fn();
   };
 
-  const renderTabMenu = () => (
+  const renderTabMenu = (variant: 'default' | 'compact' = 'default') => (
     <Menu
       visible={tabMenuVisible}
       onDismiss={() => setTabMenuVisible(false)}
       anchor={
-        <Button
-          mode="outlined"
-          compact
-          onPress={() => setTabMenuVisible(true)}
-          icon="chevron-down"
-          style={styles.tabButton}
-          contentStyle={styles.tabButtonContent}
-          labelStyle={styles.tabButtonLabel}
-        >
-          {tabLabel}
-        </Button>
+        variant === 'compact' ? (
+          <IconButton
+            icon={tab === 'albums' ? 'album' : 'account'}
+            size={22}
+            onPress={() => setTabMenuVisible(true)}
+            iconColor="#e2e8f0"
+            style={styles.tabIconMenuAnchor}
+            accessibilityLabel={`Library tab: ${tabLabel}. Opens menu to switch.`}
+            accessibilityHint="Choose Albums or Artists library"
+          />
+        ) : (
+          <Button
+            mode="outlined"
+            compact
+            onPress={() => setTabMenuVisible(true)}
+            icon="chevron-down"
+            style={styles.tabButton}
+            contentStyle={styles.tabButtonContent}
+            labelStyle={styles.tabButtonLabel}
+          >
+            {tabLabel}
+          </Button>
+        )
       }
       anchorPosition="bottom"
     >
@@ -1114,83 +1126,91 @@ export default function LibraryScreen() {
 
   const { width: windowWidth } = useWindowDimensions();
   const isNarrow = windowWidth < MOBILE_BREAKPOINT;
-  /** Narrow layout uses two main rows plus a dedicated auth row when logged out (avoids clipping Login/Register). */
-  const headerHeight =
-    (isNarrow ? 56 + 52 + (!user ? 40 : 0) : 56) + insets.top;
+  const headerHeight = (isNarrow ? 56 + 52 : 56) + insets.top;
   return (
     <View style={[styles.container, styles.containerFullWidth]}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }, isNarrow && styles.stickyHeaderNarrow]}>
         {isNarrow ? (
           <>
-            <View style={styles.headerRow1}>
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                    window.location.href = `${window.location.origin}/${getWebBasePath()}`;
-                  } else {
-                    navigation.navigate('Library');
-                  }
-                }}
-                accessibilityRole="link"
-                accessibilityLabel="RompMusic home"
-              >
-                <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="contain" accessibilityLabel="RompMusic" />
-              </Pressable>
-              <View style={styles.tabDropdownWrap}>
-                {renderTabMenu()}
+            <View style={styles.headerRow1Compact}>
+              <View style={styles.headerRow1Left}>
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                      window.location.href = `${window.location.origin}/${getWebBasePath()}`;
+                    } else {
+                      navigation.navigate('Library');
+                    }
+                  }}
+                  accessibilityRole="link"
+                  accessibilityLabel="RompMusic home"
+                >
+                  <Image source={require('../../assets/icon.png')} style={styles.headerLogoCompact} resizeMode="contain" accessibilityLabel="RompMusic" />
+                </Pressable>
+                <View style={styles.tabDropdownWrapCompact}>{renderTabMenu('compact')}</View>
               </View>
-              {Platform.OS !== 'web' && (
+              <View style={styles.headerRow1Icons}>
+                {Platform.OS !== 'web' && (
+                  <IconButton
+                    icon="download"
+                    size={21}
+                    onPress={() => navigation.navigate('OfflineLibrary')}
+                    iconColor="#888"
+                    style={styles.headerToolbarIcon}
+                    accessibilityLabel="Offline library"
+                  />
+                )}
                 <IconButton
-                  icon="download"
-                  onPress={() => navigation.navigate('OfflineLibrary')}
+                  icon="clock-outline"
+                  size={21}
+                  onPress={() => navigation.navigate('History')}
                   iconColor="#888"
-                  accessibilityLabel="Offline library"
+                  style={styles.headerToolbarIcon}
+                  accessibilityLabel="Play history"
                 />
-              )}
-              <IconButton
-                icon="clock-outline"
-                onPress={() => navigation.navigate('History')}
-                iconColor="#888"
-                accessibilityLabel="Play history"
-              />
-              <IconButton
-                icon="playlist-music"
-                onPress={() => navigation.navigate('Playlists')}
-                iconColor="#888"
-                accessibilityLabel="Playlists"
-              />
-              {user ? (
+                <IconButton
+                  icon="playlist-music"
+                  size={21}
+                  onPress={() => navigation.navigate('Playlists')}
+                  iconColor="#888"
+                  style={styles.headerToolbarIcon}
+                  accessibilityLabel="Playlists"
+                />
+              </View>
+              <View style={styles.headerRow1Spacer} />
+              {!user ? (
+                <View style={styles.authWrapCompact}>
+                  <Button
+                    mode="text"
+                    compact
+                    onPress={() => (navigation as any).navigate('Login')}
+                    textColor="#94a3b8"
+                    style={styles.loginLinkCompact}
+                    labelStyle={styles.loginLinkLabelCompact}
+                  >
+                    Login
+                  </Button>
+                  <Button
+                    mode="contained"
+                    compact
+                    onPress={() => (navigation as any).navigate('Register')}
+                    style={styles.registerButtonCompact}
+                    labelStyle={styles.registerButtonLabelCompact}
+                  >
+                    Register
+                  </Button>
+                </View>
+              ) : (
                 <IconButton
                   icon="cog"
+                  size={21}
                   onPress={() => navigation.navigate('Settings')}
                   iconColor="#888"
+                  style={styles.headerToolbarIcon}
                   accessibilityLabel="Settings"
                 />
-              ) : null}
+              )}
             </View>
-            {!user && (
-              <View style={styles.headerRowAuth}>
-                <Button
-                  mode="text"
-                  compact
-                  onPress={() => (navigation as any).navigate('Login')}
-                  textColor="#94a3b8"
-                  style={styles.loginLink}
-                  labelStyle={styles.loginLinkLabel}
-                >
-                  Login
-                </Button>
-                <Button
-                  mode="contained"
-                  compact
-                  onPress={() => (navigation as any).navigate('Register')}
-                  style={styles.registerButton}
-                  labelStyle={styles.registerButtonLabel}
-                >
-                  Register
-                </Button>
-              </View>
-            )}
             <View style={styles.headerRow2}>
               <TextInput
                 mode="outlined"
@@ -1566,12 +1586,72 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'stretch',
   },
-  headerRow1: {
+  /** Narrow library toolbar: one row, tight spacing; tab = icon menu. */
+  headerRow1Compact: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    paddingLeft: 4,
+    paddingRight: 6,
     paddingBottom: 4,
+    minHeight: 44,
+  },
+  headerRow1Spacer: {
+    flex: 1,
+    minWidth: 4,
+  },
+  headerRow1Left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 2,
+  },
+  headerLogoCompact: {
+    width: 30,
+    height: 30,
+    marginLeft: 2,
+  },
+  headerRow1Icons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginLeft: -2,
+  },
+  headerToolbarIcon: {
+    margin: 0,
+    marginHorizontal: -10,
+  },
+  tabIconMenuAnchor: {
+    margin: 0,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 10,
+    width: 40,
+    height: 40,
+  },
+  authWrapCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 0,
+    marginLeft: 2,
+  },
+  loginLinkCompact: {
+    minWidth: 0,
+    marginRight: -4,
+  },
+  loginLinkLabelCompact: {
+    color: '#94a3b8',
+    fontSize: 13,
+  },
+  registerButtonCompact: {
+    backgroundColor: '#4a9eff',
+    maxHeight: 34,
+  },
+  registerButtonLabelCompact: {
+    color: '#fff',
+    fontSize: 12,
+    marginVertical: 0,
   },
   headerRow2: {
     flexDirection: 'row',
@@ -1579,16 +1659,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 8,
     minWidth: 0,
-  },
-  headerRowAuth: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingTop: 2,
-    paddingBottom: 6,
-    gap: 4,
-    flexShrink: 0,
   },
   headerLogo: {
     width: 32,
@@ -1611,6 +1681,10 @@ const styles = StyleSheet.create({
   tabDropdownWrap: {
     paddingLeft: 16,
     paddingRight: 8,
+    flexShrink: 0,
+  },
+  tabDropdownWrapCompact: {
+    marginLeft: -2,
     flexShrink: 0,
   },
   tabButton: {

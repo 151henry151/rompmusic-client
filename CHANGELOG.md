@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-04-03
+
+### Changed
+
+- On narrow library layout, use one compact toolbar row: Albums/Artists as an icon menu, tighter logo and tab spacing, condensed utility icons, and Login/Register aligned on the same row via a flexible spacer.
+
 ## [0.1.16] - 2026-04-03
 
 ### Changed
