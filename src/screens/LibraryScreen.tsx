@@ -1114,7 +1114,9 @@ export default function LibraryScreen() {
 
   const { width: windowWidth } = useWindowDimensions();
   const isNarrow = windowWidth < MOBILE_BREAKPOINT;
-  const headerHeight = (isNarrow ? 56 + 52 : 56) + insets.top;
+  /** Narrow layout uses two main rows plus a dedicated auth row when logged out (avoids clipping Login/Register). */
+  const headerHeight =
+    (isNarrow ? 56 + 52 + (!user ? 40 : 0) : 56) + insets.top;
   return (
     <View style={[styles.container, styles.containerFullWidth]}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top + 8 }, isNarrow && styles.stickyHeaderNarrow]}>
@@ -1157,37 +1159,38 @@ export default function LibraryScreen() {
                 iconColor="#888"
                 accessibilityLabel="Playlists"
               />
-              {!user ? (
-                <View style={styles.authWrap}>
-                  <Button
-                    mode="text"
-                    compact
-                    onPress={() => (navigation as any).navigate('Login')}
-                    textColor="#94a3b8"
-                    style={styles.loginLink}
-                    labelStyle={styles.loginLinkLabel}
-                  >
-                    Login
-                  </Button>
-                  <Button
-                    mode="contained"
-                    compact
-                    onPress={() => (navigation as any).navigate('Register')}
-                    style={styles.registerButton}
-                    labelStyle={styles.registerButtonLabel}
-                  >
-                    Register
-                  </Button>
-                </View>
-              ) : (
+              {user ? (
                 <IconButton
                   icon="cog"
                   onPress={() => navigation.navigate('Settings')}
                   iconColor="#888"
                   accessibilityLabel="Settings"
                 />
-              )}
+              ) : null}
             </View>
+            {!user && (
+              <View style={styles.headerRowAuth}>
+                <Button
+                  mode="text"
+                  compact
+                  onPress={() => (navigation as any).navigate('Login')}
+                  textColor="#94a3b8"
+                  style={styles.loginLink}
+                  labelStyle={styles.loginLinkLabel}
+                >
+                  Login
+                </Button>
+                <Button
+                  mode="contained"
+                  compact
+                  onPress={() => (navigation as any).navigate('Register')}
+                  style={styles.registerButton}
+                  labelStyle={styles.registerButtonLabel}
+                >
+                  Register
+                </Button>
+              </View>
+            )}
             <View style={styles.headerRow2}>
               <TextInput
                 mode="outlined"
@@ -1576,6 +1579,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 8,
     minWidth: 0,
+  },
+  headerRowAuth: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 6,
+    gap: 4,
+    flexShrink: 0,
   },
   headerLogo: {
     width: 32,

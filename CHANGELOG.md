@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-04-03
+
+### Changed
+
+- On narrow library layout, move Login and Register to a dedicated header row below the toolbar so they are not clipped by the logo, tab menu, and action icons.
+
 ## [0.1.15] - 2026-04-02
 
 ### Added
