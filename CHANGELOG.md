@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-04-02
+
+### Added
+
+- Add `start:dev` npm script to run Metro with `--dev-client` for local development builds.
+- Document Android local development workflow in README (development build, Fast Refresh, KVM, emulator, EAS).
+
 ## [0.1.14] - 2026-03-28
 
 ### Added
